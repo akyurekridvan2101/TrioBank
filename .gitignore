@@ -1,17 +1,35 @@
-target/
+# --- Proje Temizligi (Clean-up) ---
+/target/
+/out/
+.mvn/wrapper/maven-wrapper.jar
+dependency-reduced-pom.xml
 pom.xml.tag
 pom.xml.releaseBackup
 pom.xml.versionsBackup
 pom.xml.next
 release.properties
-dependency-reduced-pom.xml
 buildNumber.properties
-.mvn/timing.properties
-# https://maven.apache.org/wrapper/#usage-without-binary-jar
-.mvn/wrapper/maven-wrapper.jar
 
-# Eclipse m2e generated files
-# Eclipse Core
-.project
-# JDT-specific (Eclipse Java Development Tools)
-.classpath
+# --- IntelliJ / IDE (Sizin Kullanacaginiz Araclar) ---
+.idea/
+*.iws
+*.iml
+*.ipr
+*.class
+*.log
+
+# --- Kubernetes / Terraform State (HAYATI ONEMLI) ---
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars          # Burayi sormustun: Datalari korumak icin ekliyoruz.
+tfplan
+
+# --- Secrets ve Calisma Dosyalari ---
+*.env             # Postgres/Microservice Sifreleri (Örn: postgres.env)
+*.key
+*.pem
+*.cert
+
+# --- OS ---
+.DS_Store
