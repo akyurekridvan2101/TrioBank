@@ -1,0 +1,271 @@
+openapi: 3.0.3
+info:
+  title: Auth Service API
+  version: 1.0.0
+  description: |
+    Bu servis, kullanıcı giriş, kayıt, token üretimi, token yenileme ve API Gateway middleware’i için token doğrulama işlemlerini yürütür.
+    Access token'lar DB’de tutulmaz; yalnızca Refresh token saklanır.
+    API Gateway her istekte access token doğrulamak için /auth/validation endpoint’ini kullanır.
+
+servers:
+  - url: http://localhost:3000/api/v1
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+
+    EmptyObject:
+      type: object
+      example: {}
+
+    LoginRequest:
+      type: object
+      required: [tc, sifre]
+      properties:
+        tc:
+          type: string
+          example: "11111111111"
+        sifre:
+          type: string
+          example: "Password123"
+
+    LoginResponse:
+      type: object
+      properties:
+        oturumId:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+
+    ConfirmRequest:
+      type: object
+      required: [oturumID, kod]
+      properties:
+        oturumID:
+          type: string
+          format: uuid
+        kod:
+          type: string
+          example: "123456"
+
+    RegisterRequest:
+      type: object
+      required: [isim, soyisim, email, sifre, tel, tc]
+      properties:
+        isim: { type: string, example: "Ahmet" }
+        soyisim: { type: string, example: "Yılmaz" }
+        email: { type: string, example: "ahmet@example.com" }
+        sifre: { type: string, example: "GucluSifre123" }
+        tel: { type: string, example: "5551234567" }
+        tc: { type: string, example: "11111111111" }
+
+    TokenResponse:
+      type: object
+      properties:
+        refreshToken: { type: string }
+        accessToken: { type: string }
+
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+
+    RefreshResponse:
+      type: object
+      properties:
+        accessToken: { type: string }
+
+    ValidationRequest:
+      type: object
+      required: [accessToken]
+      properties:
+        accessToken:
+          type: string
+
+    PasswordChangeRequest:
+      type: object
+      required: [yeniSifre]
+      properties:
+        yeniSifre:
+          type: string
+          example: "YeniSifre123!"
+
+paths:
+
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: Kullanıcı Girişi
+      description: |
+        Kullanıcı giriş bilgileri Auth DB’de doğrulanır.  
+        Bilgiler doğruysa geçici oturumId ve SMS doğrulama kodu üretilir ve Redis’te saklanır.
+        Kullanıcıya yalnızca oturumId döndürülür, SMS kodu SMS servisi tarafından iletilir.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Giriş başarılı. Oturum başlatıldı ve SMS gönderildi.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginResponse' }
+        '400': { description: Eksik veya hatalı veri. }
+        '401': { description: TC veya şifre yanlış. }
+        '500': { description: Sunucu hatası. }
+
+  /auth/login/confirm:
+    post:
+      tags: [Authentication]
+      summary: Giriş Onayı (SMS Kod Doğrulama)
+      description: |
+        Kullanıcının gönderdiği SMS kodu ve oturumID Redis üzerinden doğrulanır.
+        Kod geçerli ise kullanıcıya access ve refresh token üretilerek gönderilir.
+        Refresh token DB’ye kaydedilir.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ConfirmRequest' }
+      responses:
+        '200':
+          description: Giriş tamamlandı, tokenlar üretildi.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+        '400': { description: Kod hatalı veya oturum geçersiz. }
+        '410': { description: Kodun süresi dolmuş. }
+        '500': { description: Sunucu hatası. }
+
+  /auth/register:
+    post:
+      tags: [Registration]
+      summary: Kullanıcı Kaydı Başlatma
+      description: |
+        Kullanıcı bilgileri kontrol edilir; eğer mevcut bir hesap varsa süreç durdurulur.
+        Yeni kullanıcı için SMS doğrulama süreci başlatılır, bilgiler Redis’e geçici olarak kaydedilir.
+        Kullanıcıya oturumId döndürülür.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterRequest' }
+      responses:
+        '200':
+          description: Kayıt başlatıldı, SMS doğrulama gönderildi.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginResponse' }
+        '409': { description: Kullanıcı zaten mevcut. }
+        '500': { description: Sunucu hatası. }
+
+  /auth/register/confirm:
+    post:
+      tags: [Registration]
+      summary: Kayıt Onayı (SMS Kod Doğrulama)
+      description: |
+        SMS kodu doğrulanır.  
+        Redis’te saklanan kullanıcı bilgileri Auth DB’ye kaydedilir.  
+        Başarılı kayıt sonrası yeni kullanıcı Kafka’ya event olarak yayınlanır.  
+        Ardından tokenlar oluşturularak kullanıcıya teslim edilir.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ConfirmRequest' }
+      responses:
+        '200':
+          description: Kayıt tamamlandı, tokenlar üretildi.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+        '400': { description: Kod hatalı. }
+        '410': { description: Kod süresi dolmuş. }
+        '500': { description: Sunucu hatası. }
+
+  /auth/logout:
+    post:
+      tags: [Token Operations]
+      summary: Çıkış Yap
+      security:
+        - bearerAuth: []
+      description: |
+        Kullanıcı çıkış yaptığında refresh token DB’den temizlenir.
+        Access token DB’de tutulmadığı için yalnızca refresh token’ın silinmesi yeterlidir.
+      responses:
+        '200':
+          description: Çıkış başarılı.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmptyObject' }
+        '401': { description: Geçersiz veya eksik access token. }
+        '500': { description: Sunucu hatası. }
+
+  /auth/refresh:
+    post:
+      tags: [Token Operations]
+      summary: Access Token Yenileme
+      description: |
+        Access token süresi dolduğunda kullanıcı refresh token ile yeni access token talep eder.
+        Refresh token DB’de doğrulanır; geçerliyse yeni access token üretilir.
+        Refresh token geçerli değilse kullanıcı sistemden çıkarılmalıdır.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshRequest' }
+      responses:
+        '200':
+          description: Yeni access token üretildi.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RefreshResponse' }
+        '401': { description: Refresh token geçersiz veya süresi dolmuş. }
+        '500': { description: Sunucu hatası. }
+
+  /auth/validation:
+    post:
+      tags: [Token Operations]
+      summary: Access Token Doğrulama (API Gateway Middleware Kullanır)
+      description: |
+        API Gateway bu endpoint'i her istek için otomatik olarak çağırır.
+        Access token geçerliyse 200 döner ve istek yönlendirilir.
+        Token geçersiz ise 401 döner ve Gateway isteği reddeder.
+        Bu endpoint client tarafından direkt kullanılmaz.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ValidationRequest' }
+      responses:
+        '200': { description: Token geçerli. }
+        '401': { description: Token geçersiz. }
+        '500': { description: Sunucu hatası. }
+
+  /auth/password-change:
+    post:
+      tags: [Account Settings]
+      summary: Şifre Değiştirme
+      security:
+        - bearerAuth: []
+      description: |
+        Kullanıcı geçerli access token ile yeni şifre gönderir.
+        Auth DB’de şifre güncellenir.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PasswordChangeRequest' }
+      responses:
+        '200': { description: Şifre güncellendi. }
+        '400': { description: Yeni şifre formatı geçersiz. }
+        '401': { description: Token geçersiz. }
+        '500': { description: Sunucu hatası. }
