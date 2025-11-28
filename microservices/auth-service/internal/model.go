@@ -26,3 +26,10 @@ type Tokens struct {
 	ExpiredAt time.Time          `bson:"expiredAt" json:"expiredAt"`
 	IsActive  bool               `bson:"isActive" json:"isActive"`
 }
+
+type DataBaseI interface {
+	X()
+}
+type SessionManagerI interface {
+	Y()
+}

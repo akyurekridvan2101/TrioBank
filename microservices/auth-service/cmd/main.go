@@ -9,5 +9,11 @@ func init() {
 	config.LoadEnv()
 }
 func main() {
-	internal.StartMongoDB()
+	var repo internal.Repo
+	var redisDb = internal.RedisDB{Db: internal.StartRedisDB()}
+	var mongoDb = internal.MongoDB{Db: internal.StartMongoDB()}
+	repo.DataBase = mongoDb
+	repo.SessionManager = redisDb
+	
+	internal.StartRouter()
 }
