@@ -25,42 +25,42 @@ components:
 
     LoginRequest:
       type: object
-      required: [tc, sifre]
+      required: [tc, password]
       properties:
         tc:
           type: string
           example: "11111111111"
-        sifre:
+        password:
           type: string
           example: "Password123"
 
     LoginResponse:
       type: object
       properties:
-        oturumId:
+        sessionId:
           type: string
           format: uuid
           example: "550e8400-e29b-41d4-a716-446655440000"
 
     ConfirmRequest:
       type: object
-      required: [oturumID, kod]
+      required: [sessionId, code]
       properties:
-        oturumID:
+        sessionId:
           type: string
           format: uuid
-        kod:
+        code:
           type: string
           example: "123456"
 
     RegisterRequest:
       type: object
-      required: [isim, soyisim, email, sifre, tel, tc]
+      required: [name, surname, email, password, tel, tc]
       properties:
-        isim: { type: string, example: "Ahmet" }
-        soyisim: { type: string, example: "Yılmaz" }
+        name: { type: string, example: "Ahmet" }
+        surname: { type: string, example: "Yılmaz" }
         email: { type: string, example: "ahmet@example.com" }
-        sifre: { type: string, example: "GucluSifre123" }
+        password: { type: string, example: "Guclupassword123" }
         tel: { type: string, example: "5551234567" }
         tc: { type: string, example: "11111111111" }
 
@@ -91,11 +91,11 @@ components:
 
     PasswordChangeRequest:
       type: object
-      required: [yeniSifre]
+      required: [yenipassword]
       properties:
-        yeniSifre:
+        yenipassword:
           type: string
-          example: "YeniSifre123!"
+          example: "Yenipassword123!"
 
 paths:
 
@@ -105,8 +105,8 @@ paths:
       summary: Kullanıcı Girişi
       description: |
         Kullanıcı giriş bilgileri Auth DB’de doğrulanır.  
-        Bilgiler doğruysa geçici oturumId ve SMS doğrulama kodu üretilir ve Redis’te saklanır.
-        Kullanıcıya yalnızca oturumId döndürülür, SMS kodu SMS servisi tarafından iletilir.
+        Bilgiler doğruysa geçici sessionId ve SMS doğrulama codeu üretilir ve Redis’te saklanır.
+        Kullanıcıya yalnızca sessionId döndürülür, SMS codeu SMS servisi tarafından iletilir.
       requestBody:
         required: true
         content:
@@ -125,10 +125,10 @@ paths:
   /auth/login/confirm:
     post:
       tags: [Authentication]
-      summary: Giriş Onayı (SMS Kod Doğrulama)
+      summary: Giriş Onayı (SMS code Doğrulama)
       description: |
-        Kullanıcının gönderdiği SMS kodu ve oturumID Redis üzerinden doğrulanır.
-        Kod geçerli ise kullanıcıya access ve refresh token üretilerek gönderilir.
+        Kullanıcının gönderdiği SMS codeu ve sessionId Redis üzerinden doğrulanır.
+        code geçerli ise kullanıcıya access ve refresh token üretilerek gönderilir.
         Refresh token DB’ye kaydedilir.
       requestBody:
         required: true
@@ -141,8 +141,8 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/TokenResponse' }
-        '400': { description: Kod hatalı veya oturum geçersiz. }
-        '410': { description: Kodun süresi dolmuş. }
+        '400': { description: code hatalı veya oturum geçersiz. }
+        '410': { description: codeun süresi dolmuş. }
         '500': { description: Sunucu hatası. }
 
   /auth/register:
@@ -152,7 +152,7 @@ paths:
       description: |
         Kullanıcı bilgileri kontrol edilir; eğer mevcut bir hesap varsa süreç durdurulur.
         Yeni kullanıcı için SMS doğrulama süreci başlatılır, bilgiler Redis’e geçici olarak kaydedilir.
-        Kullanıcıya oturumId döndürülür.
+        Kullanıcıya sessionId döndürülür.
       requestBody:
         required: true
         content:
@@ -170,9 +170,9 @@ paths:
   /auth/register/confirm:
     post:
       tags: [Registration]
-      summary: Kayıt Onayı (SMS Kod Doğrulama)
+      summary: Kayıt Onayı (SMS code Doğrulama)
       description: |
-        SMS kodu doğrulanır.  
+        SMS codeu doğrulanır.  
         Redis’te saklanan kullanıcı bilgileri Auth DB’ye kaydedilir.  
         Başarılı kayıt sonrası yeni kullanıcı Kafka’ya event olarak yayınlanır.  
         Ardından tokenlar oluşturularak kullanıcıya teslim edilir.
@@ -187,8 +187,8 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/TokenResponse' }
-        '400': { description: Kod hatalı. }
-        '410': { description: Kod süresi dolmuş. }
+        '400': { description: code hatalı. }
+        '410': { description: code süresi dolmuş. }
         '500': { description: Sunucu hatası. }
 
   /auth/logout:

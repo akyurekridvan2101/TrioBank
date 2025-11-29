@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"context"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -26,10 +27,13 @@ type Tokens struct {
 	ExpiredAt time.Time          `bson:"expiredAt" json:"expiredAt"`
 	IsActive  bool               `bson:"isActive" json:"isActive"`
 }
-
+type loginData struct {
+	Tc       string `json:"tc"`
+	Password string `json:"password"`
+}
 type DataBaseI interface {
-	X()
+	loginControl(ctx context.Context, data loginData) error
 }
 type SessionManagerI interface {
-	Y()
+	saveSessionId(ctx context.Context, sessionId string, code int64) error
 }

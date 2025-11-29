@@ -14,6 +14,5 @@ func main() {
 	var mongoDb = internal.MongoDB{Db: internal.StartMongoDB()}
 	repo.DataBase = mongoDb
 	repo.SessionManager = redisDb
-	
-	internal.StartRouter()
+	internal.StartRouter(repo)
 }
