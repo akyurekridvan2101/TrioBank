@@ -1,0 +1,10 @@
+services:
+  mail-service:
+    container_name: MailService
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8081"
+    env_file:
+      - config/.env
