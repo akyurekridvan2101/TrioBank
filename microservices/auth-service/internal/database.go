@@ -22,18 +22,18 @@ type RedisDB struct {
 	Db *redis.Client
 }
 
-func (db MongoDB) loginControl(ctx context.Context, data loginData) error {
+func (db MongoDB) loginControl(ctx context.Context, data loginData) (User, error) {
 	var user User
 	collection := db.Db.Collection("Users").FindOne(ctx, bson.M{"tc": data.Tc})
 	err := collection.Decode(&user)
 	if err != nil {
-		return err
+		return user, err
 	}
 	err = pkg.HashedPasswordControl(data.Password, user.HashedPassword)
 	if err != nil {
-		return err
+		return user, err
 	} else {
-		return nil
+		return user, nil
 	}
 }
 

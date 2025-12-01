@@ -3,6 +3,8 @@ package internal
 import (
 	"log"
 	"net/http"
+
+	"github.com/TrioBank/triobank-platform/microservices/auth-service/config"
 )
 
 func StartRouter(r Repo) {
@@ -10,7 +12,7 @@ func StartRouter(r Repo) {
 
 	http.HandleFunc("/auth/login", middleware(r.login))
 
-	err := http.ListenAndServe("localhost:8080", nil)
+	err := http.ListenAndServe(config.GetEnv("AUTH_SERVICE_PORT"), nil)
 	if err != nil {
 		log.Fatal(err.Error())
 	}

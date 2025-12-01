@@ -14,6 +14,6 @@ func GetEnv(name string) string {
 func LoadEnv() {
 	err := godotenv.Load("config/.env")
 	if err != nil {
-		log.Fatal("setting env variable error: ", err.Error())
+		log.Println("setting env variable error: ", err.Error())
 	}
 }

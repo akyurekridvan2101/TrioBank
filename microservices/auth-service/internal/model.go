@@ -31,8 +31,13 @@ type loginData struct {
 	Tc       string `json:"tc"`
 	Password string `json:"password"`
 }
+type SmsRequestData struct {
+	Receiver string `json:"receiver"`
+	Code     string `json:"code"`
+}
+
 type DataBaseI interface {
-	loginControl(ctx context.Context, data loginData) error
+	loginControl(ctx context.Context, data loginData) (User, error)
 }
 type SessionManagerI interface {
 	saveSessionId(ctx context.Context, sessionId string, code int64) error
