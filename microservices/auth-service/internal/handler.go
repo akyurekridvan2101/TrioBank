@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"net/http"
@@ -22,6 +23,7 @@ type Repo struct {
 }
 
 func (repo Repo) login(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		_, _ = w.Write([]byte("this endpoint can be used only with post request"))
@@ -59,19 +61,14 @@ func (repo Repo) login(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("while generating the session id, an error occured"))
 		return
 	}
-	err = repo.SessionManager.saveSessionId(ctx, base64.URLEncoding.EncodeToString(sessionId), code.Int64()+1000)
+	err = repo.SessionManager.saveSessionId(ctx, user.Id, base64.URLEncoding.EncodeToString(sessionId), code.Int64()+1000)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte("while saving the session id into redis, an error occured"))
 		return
 	}
-	// now we created a structure that generate code and session id
-	// also we saved code and session id in redis with timeout
-	// the on the last row we send session id to client
-	// we did not send verification code to client via sms
 
-	// in here sms should be sent via sms service
-	var requestData SmsRequestData
+	var requestData smsRequestData
 	requestData.Receiver = user.Email
 	requestData.Code = strconv.FormatInt(code.Int64()+1000, 10)
 	requestDataJson, _ := json.Marshal(requestData)
@@ -105,4 +102,74 @@ func (repo Repo) login(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(base64.URLEncoding.EncodeToString(sessionId))
 
+}
+
+func (repo Repo) Confirm(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		_, _ = w.Write([]byte("the request body could not be decoded or the request may do not include password or tc fields"))
+		return
+	}
+	var data confirmData
+	err := json.NewDecoder(r.Body).Decode(&data)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte("the request body should include only session id and verification code"))
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), time.Second*5)
+	defer cancel()
+	code, err := strconv.ParseInt(data.Code, 10, 64)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte("code type is not correct"))
+		return
+	}
+	userId, err := repo.SessionManager.controlSessionId(ctx, data.SessionId, code)
+	if errors.Is(err, ErrCodeDoesntMatched) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte("the code is not correct or session id invalid"))
+		return
+	} else if errors.Is(err, ErrCodeExpired) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte("the code is expired"))
+		return
+	} else if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("something went wrong in server"))
+		return
+	}
+	// access and refresh token will be created and stored
+	refreshToken, accessToken, err := repo.DataBase.createRefreshAndAccessToken(ctx, userId)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("something went wrong in creating refresh and access token"))
+		return
+	}
+	var tokens tokensPair
+	tokens.AccessToken = accessToken
+	tokens.RefreshToken = refreshToken
+
+	cookie := http.Cookie{
+		Name:     "Refresh-Token",
+		Value:    refreshToken,
+		Secure:   true,
+		HttpOnly: true,
+		Path:     "/",
+		MaxAge:   7 * 24 * 60 * 60,
+	}
+
+	ret, err := json.Marshal(struct {
+		AccessToken string `json:"access_token"`
+	}{tokens.AccessToken})
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("something went wrong in sending access token"))
+		return
+	}
+
+	http.SetCookie(w, &cookie)
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(ret)
 }

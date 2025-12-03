@@ -27,18 +27,28 @@ type Tokens struct {
 	ExpiredAt time.Time          `bson:"expiredAt" json:"expiredAt"`
 	IsActive  bool               `bson:"isActive" json:"isActive"`
 }
+type tokensPair struct {
+	RefreshToken string `json:"refresh_token"`
+	AccessToken  string `json:"access_token"`
+}
 type loginData struct {
 	Tc       string `json:"tc"`
 	Password string `json:"password"`
 }
-type SmsRequestData struct {
+type smsRequestData struct {
 	Receiver string `json:"receiver"`
 	Code     string `json:"code"`
+}
+type confirmData struct {
+	SessionId string
+	Code      string
 }
 
 type DataBaseI interface {
 	loginControl(ctx context.Context, data loginData) (User, error)
+	createRefreshAndAccessToken(ctx context.Context, id primitive.ObjectID) (string, string, error)
 }
 type SessionManagerI interface {
-	saveSessionId(ctx context.Context, sessionId string, code int64) error
+	saveSessionId(ctx context.Context, userId primitive.ObjectID, sessionId string, code int64) error
+	controlSessionId(ctx context.Context, sessionId string, code int64) (primitive.ObjectID, error)
 }

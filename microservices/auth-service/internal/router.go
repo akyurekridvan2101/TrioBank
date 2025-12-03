@@ -11,6 +11,7 @@ func StartRouter(r Repo) {
 	// handler will be placed here
 
 	http.HandleFunc("/auth/login", middleware(r.login))
+	http.HandleFunc("/auth/login/confirm", middleware(r.Confirm))
 
 	err := http.ListenAndServe(config.GetEnv("AUTH_SERVICE_PORT"), nil)
 	if err != nil {
