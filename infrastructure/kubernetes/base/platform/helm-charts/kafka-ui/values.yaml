@@ -1,0 +1,22 @@
+
+kafka-ui:
+  commonAnnotations:
+    argocd.argoproj.io/sync-wave: "600"
+  
+  service:
+    type: ClusterIP
+    port: 80
+
+  yamlApplicationConfig:
+    kafka:
+      clusters:
+        - name: triobank-local
+          
+          bootstrapServers: kafka-kafka-bootstrap.triobank.svc.cluster.local:9092
+          
+          kafkaConnect:
+            - name: debezium
+              address: http://connect-connect-api.triobank.svc.cluster.local:8083
+          
+          properties:
+            security.protocol: PLAINTEXT

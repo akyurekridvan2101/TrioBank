@@ -1,0 +1,20 @@
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.vault.service.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: vault
+  {{- with .Values.vault.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: ExternalName
+  externalName: {{ .Values.vault.externalHost }}
+  ports:
+    - port: {{ .Values.vault.service.port }}
+      targetPort: 8200
+      protocol: TCP
+      name: http
