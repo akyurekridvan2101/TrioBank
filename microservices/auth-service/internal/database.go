@@ -41,7 +41,14 @@ func (db MongoDB) loginControl(ctx context.Context, data loginData) (User, error
 }
 
 func (db MongoDB) createRefreshAndAccessToken(ctx context.Context, userId primitive.ObjectID) (string, string, error) {
+	collection := db.Db.Collection("Tokens")
+	_, err := collection.DeleteMany(ctx, bson.M{"isActive": true, "user_id": userId})
+	if err != nil {
+		return "", "", err
+	}
+
 	var refresh Tokens
+	refresh.Id = primitive.NewObjectID()
 	refresh.UserId = userId
 	refresh.IsActive = true
 	refresh.CreatedAt = time.Now()
@@ -57,7 +64,7 @@ func (db MongoDB) createRefreshAndAccessToken(ctx context.Context, userId primit
 	if err != nil {
 		return "", "", err
 	}
-	collection := db.Db.Collection("Tokens")
+
 	_, err = collection.InsertOne(ctx, refresh)
 	if err != nil {
 		return "", "", err
@@ -66,10 +73,9 @@ func (db MongoDB) createRefreshAndAccessToken(ctx context.Context, userId primit
 }
 
 func (db RedisDB) saveSessionId(ctx context.Context, userId primitive.ObjectID, sessionId string, code int64) error {
-	value := struct {
-		Code   int64
-		UserId primitive.ObjectID
-	}{Code: code, UserId: userId}
+	var value RedisSessionData
+	value.UserId = userId
+	value.Code = code
 
 	v, err := json.Marshal(value)
 	if err != nil {
@@ -83,10 +89,7 @@ func (db RedisDB) saveSessionId(ctx context.Context, userId primitive.ObjectID, 
 	}
 }
 func (db RedisDB) controlSessionId(ctx context.Context, sessionId string, code int64) (primitive.ObjectID, error) {
-	value := struct {
-		Code   int64
-		UserId primitive.ObjectID
-	}{}
+	var value RedisSessionData
 	respond := db.Db.Get(ctx, sessionId)
 	result, err := respond.Bytes()
 	if err != nil && !errors.Is(err, redis.Nil) {
@@ -101,8 +104,7 @@ func (db RedisDB) controlSessionId(ctx context.Context, sessionId string, code i
 	if value.Code != code {
 		return [12]byte{}, ErrCodeDoesntMatched
 	}
-	return value.UserId, err
-
+	return value.UserId, nil
 }
 
 func StartMongoDB() *mongo.Database {

@@ -31,6 +31,10 @@ type tokensPair struct {
 	RefreshToken string `json:"refresh_token"`
 	AccessToken  string `json:"access_token"`
 }
+type RedisSessionData struct {
+	Code   int64              `json:"code"`
+	UserId primitive.ObjectID `json:"userId"`
+}
 type loginData struct {
 	Tc       string `json:"tc"`
 	Password string `json:"password"`
@@ -40,8 +44,8 @@ type smsRequestData struct {
 	Code     string `json:"code"`
 }
 type confirmData struct {
-	SessionId string
-	Code      string
+	SessionId string `json:"session-id"`
+	Code      string `json:"code"`
 }
 
 type DataBaseI interface {

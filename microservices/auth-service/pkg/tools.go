@@ -5,7 +5,6 @@ import (
 
 	"github.com/TrioBank/triobank-platform/microservices/auth-service/config"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -32,7 +31,6 @@ func CreateRefreshToken(userId primitive.ObjectID) (string, error) {
 		Issuer:    "auth-service",
 		Subject:   userId.String(),
 		ExpiresAt: &jwt.NumericDate{time.Now().Add(time.Hour * 7 * 24)},
-		ID:        uuid.New().String(),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

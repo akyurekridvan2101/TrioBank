@@ -108,7 +108,7 @@ func (repo Repo) Confirm(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
-		_, _ = w.Write([]byte("the request body could not be decoded or the request may do not include password or tc fields"))
+		_, _ = w.Write([]byte("only post request is allowed"))
 		return
 	}
 	var data confirmData
@@ -127,15 +127,16 @@ func (repo Repo) Confirm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userId, err := repo.SessionManager.controlSessionId(ctx, data.SessionId, code)
-	if errors.Is(err, ErrCodeDoesntMatched) {
-		w.WriteHeader(http.StatusUnauthorized)
-		_, _ = w.Write([]byte("the code is not correct or session id invalid"))
-		return
-	} else if errors.Is(err, ErrCodeExpired) {
-		w.WriteHeader(http.StatusUnauthorized)
-		_, _ = w.Write([]byte("the code is expired"))
-		return
-	} else if err != nil {
+	if err != nil {
+		if errors.Is(err, ErrCodeDoesntMatched) {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte("the code is not correct or session id invalid"))
+			return
+		} else if errors.Is(err, ErrCodeExpired) {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte("the code is expired"))
+			return
+		}
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte("something went wrong in server"))
 		return
