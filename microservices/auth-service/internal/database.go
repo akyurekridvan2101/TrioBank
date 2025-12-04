@@ -42,7 +42,7 @@ func (db MongoDB) loginControl(ctx context.Context, data loginData) (User, error
 
 func (db MongoDB) createRefreshAndAccessToken(ctx context.Context, userId primitive.ObjectID) (string, string, error) {
 	collection := db.Db.Collection("Tokens")
-	_, err := collection.DeleteMany(ctx, bson.M{"isActive": true, "user_id": userId})
+	_, err := collection.UpdateMany(ctx, bson.M{"user_id": userId}, bson.M{"$set": bson.M{"isActive": false}})
 	if err != nil {
 		return "", "", err
 	}
@@ -88,21 +88,29 @@ func (db RedisDB) saveSessionId(ctx context.Context, userId primitive.ObjectID, 
 		return nil
 	}
 }
+func (db RedisDB) deleteSessionId(ctx context.Context, sessionId string) error {
+	_, err := db.Db.Del(ctx, sessionId).Result()
+	if err != nil {
+		return err
+	}
+	return nil
+}
 func (db RedisDB) controlSessionId(ctx context.Context, sessionId string, code int64) (primitive.ObjectID, error) {
 	var value RedisSessionData
 	respond := db.Db.Get(ctx, sessionId)
 	result, err := respond.Bytes()
-	if err != nil && !errors.Is(err, redis.Nil) {
+	if errors.Is(err, redis.Nil) {
+		return primitive.ObjectID{}, ErrCodeNotFound
+	}
+	if err != nil {
 		return primitive.ObjectID{}, err
-	} else if errors.Is(err, redis.Nil) {
-		return [12]byte{}, ErrCodeExpired
 	}
 	err = json.Unmarshal(result, &value)
 	if err != nil {
-		return [12]byte{}, err
+		return primitive.ObjectID{}, err
 	}
 	if value.Code != code {
-		return [12]byte{}, ErrCodeDoesntMatched
+		return primitive.ObjectID{}, ErrCodeIsNotCorrect
 	}
 	return value.UserId, nil
 }

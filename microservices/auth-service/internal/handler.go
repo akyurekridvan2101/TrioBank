@@ -128,13 +128,13 @@ func (repo Repo) Confirm(w http.ResponseWriter, r *http.Request) {
 	}
 	userId, err := repo.SessionManager.controlSessionId(ctx, data.SessionId, code)
 	if err != nil {
-		if errors.Is(err, ErrCodeDoesntMatched) {
+		if errors.Is(err, ErrCodeIsNotCorrect) {
 			w.WriteHeader(http.StatusUnauthorized)
 			_, _ = w.Write([]byte("the code is not correct or session id invalid"))
 			return
-		} else if errors.Is(err, ErrCodeExpired) {
+		} else if errors.Is(err, ErrCodeNotFound) {
 			w.WriteHeader(http.StatusUnauthorized)
-			_, _ = w.Write([]byte("the code is expired"))
+			_, _ = w.Write([]byte("the code is not found"))
 			return
 		}
 		w.WriteHeader(http.StatusInternalServerError)
@@ -146,6 +146,12 @@ func (repo Repo) Confirm(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte("something went wrong in creating refresh and access token"))
+		return
+	}
+	err = repo.SessionManager.deleteSessionId(ctx, data.SessionId)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("deleting session data in redis rised an error"))
 		return
 	}
 	var tokens tokensPair

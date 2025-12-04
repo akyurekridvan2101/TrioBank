@@ -55,4 +55,5 @@ type DataBaseI interface {
 type SessionManagerI interface {
 	saveSessionId(ctx context.Context, userId primitive.ObjectID, sessionId string, code int64) error
 	controlSessionId(ctx context.Context, sessionId string, code int64) (primitive.ObjectID, error)
+	deleteSessionId(ctx context.Context, sessionId string) error
 }
