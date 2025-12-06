@@ -71,6 +71,14 @@ func (db MongoDB) createRefreshAndAccessToken(ctx context.Context, userId primit
 	}
 	return refreshToken, accessToken, nil
 }
+func (db MongoDB) isUserExist(ctx context.Context, tc string) error {
+	collection := db.Db.Collection("Users")
+	result := collection.FindOne(ctx, bson.M{"tc": tc})
+	if result == nil {
+		return ErrUserAlreadyExist
+	}
+	return nil
+}
 
 func (db RedisDB) saveSessionId(ctx context.Context, userId primitive.ObjectID, sessionId string, code int64) error {
 	var value RedisSessionData

@@ -1,19 +1,19 @@
 package internal
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+
 	"math/big"
 	"net/http"
 	"strconv"
 	"time"
 
-	"github.com/TrioBank/triobank-platform/microservices/auth-service/config"
+	"github.com/TrioBank/triobank-platform/microservices/auth-service/pkg"
 )
 
 type Repo struct {
@@ -71,38 +71,24 @@ func (repo Repo) login(w http.ResponseWriter, r *http.Request) {
 	var requestData smsRequestData
 	requestData.Receiver = user.Email
 	requestData.Code = strconv.FormatInt(code.Int64()+1000, 10)
-	requestDataJson, _ := json.Marshal(requestData)
-	targetUrl := "http://" + config.GetEnv("MAIL_SERVICE_PORT") + "/send"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, targetUrl, bytes.NewReader(requestDataJson))
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte(err.Error()))
-		return
-	}
-	deadline, _ := ctx.Deadline()
-	req.Header.Set("X-Request-Deadline", strconv.FormatInt(deadline.UnixMilli(), 10))
-	req.Header.Set("X-Internal-Secret", config.GetEnv("SECRET_KEY"))
-	response, err := repo.Client.Do(req)
-	if err != nil {
-		fmt.Println(err)
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte("an error occured while sending a request to sms service"))
-		return
-	}
-	defer func() {
-		if err := response.Body.Close(); err == nil {
-		} else {
-			fmt.Println(err.Error(), "response could not be closed")
-		}
-	}()
-	if response.Status != "200 OK" {
-		w.WriteHeader(response.StatusCode)
-		_, _ = w.Write([]byte("the sms could not sent"))
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(base64.URLEncoding.EncodeToString(sessionId))
 
+	errChannel := make(chan error)
+	go SendMail(ctx, repo, requestData, errChannel)
+	select {
+	case x := <-errChannel:
+		if x != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Print(x.Error())
+			_, _ = w.Write([]byte("something wen wrong while sending sms"))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(base64.URLEncoding.EncodeToString(sessionId))
+	case <-ctx.Done():
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("timeout error occured"))
+		return
+	}
 }
 
 func (repo Repo) Confirm(w http.ResponseWriter, r *http.Request) {
@@ -180,4 +166,52 @@ func (repo Repo) Confirm(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &cookie)
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(ret)
+}
+
+func (repo Repo) Register(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	var user User
+	var data struct {
+		name     string `json:"name"`
+		surname  string `json:"surname"`
+		email    string `json:"email"`
+		password string `json:"password"`
+		tel      string `json:"tel"`
+		tc       string `json:"tc"`
+	}
+	err := json.NewDecoder(r.Body).Decode(&data)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+	user.Name = data.name
+	user.Surname = data.surname
+	user.Email = data.email
+	user.Tel = data.tel
+	user.Tc = data.tc
+	hashedPassword, err := pkg.HashPassword(data.password)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	user.HashedPassword = hashedPassword
+	ctx, cancel := context.WithTimeout(r.Context(), time.Second*5)
+	defer cancel()
+
+	err = repo.DataBase.isUserExist(ctx, user.Tc)
+	if errors.Is(err, ErrUserAlreadyExist) {
+		w.WriteHeader(http.StatusConflict)
+		_, _ = w.Write([]byte("the user already exist"))
+		return
+	} else if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("something went wrong in server"))
+		return
+	}
+	//	repo.Client
+
 }

@@ -51,7 +51,9 @@ type confirmData struct {
 type DataBaseI interface {
 	loginControl(ctx context.Context, data loginData) (User, error)
 	createRefreshAndAccessToken(ctx context.Context, id primitive.ObjectID) (string, string, error)
+	isUserExist(ctx context.Context, tc string) error
 }
+
 type SessionManagerI interface {
 	saveSessionId(ctx context.Context, userId primitive.ObjectID, sessionId string, code int64) error
 	controlSessionId(ctx context.Context, sessionId string, code int64) (primitive.ObjectID, error)

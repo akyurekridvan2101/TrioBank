@@ -13,6 +13,8 @@ func StartRouter(r Repo) {
 	http.HandleFunc("/auth/login", middleware(r.login))
 	http.HandleFunc("/auth/login/confirm", middleware(r.Confirm))
 
+	//http.HandleFunc("/auth/register", middleware(r.))
+
 	err := http.ListenAndServe(config.GetEnv("AUTH_SERVICE_PORT"), nil)
 	if err != nil {
 		log.Fatal(err.Error())

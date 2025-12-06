@@ -39,8 +39,8 @@ components:
       properties:
         sessionId:
           type: string
-          format: uuid
-          example: "550e8400-e29b-41d4-a716-446655440000"
+          description: Base64 URL encoded 32-byte session ID
+          example: "YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXo"
 
     ConfirmRequest:
       type: object
@@ -48,10 +48,10 @@ components:
       properties:
         sessionId:
           type: string
-          format: uuid
+          example: "YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXo"
         code:
           type: string
-          example: "123456"
+          example: "1234"
 
     RegisterRequest:
       type: object
@@ -104,9 +104,9 @@ paths:
       tags: [Authentication]
       summary: Kullanıcı Girişi
       description: |
-        Kullanıcı giriş bilgileri Auth DB’de doğrulanır.  
-        Bilgiler doğruysa geçici sessionId ve SMS doğrulama codeu üretilir ve Redis’te saklanır.
-        Kullanıcıya yalnızca sessionId döndürülür, SMS codeu SMS servisi tarafından iletilir.
+        Kullanıcı giriş bilgileri Auth DB’de doğrulanır.
+        Bilgiler doğruysa sessionId ve doğrulama codeu üretilir.
+        sessionId Base64 URL encoded bir random 32-byte değerdir.
       requestBody:
         required: true
         content:
@@ -114,22 +114,40 @@ paths:
             schema: { $ref: '#/components/schemas/LoginRequest' }
       responses:
         '200':
-          description: Giriş başarılı. Oturum başlatıldı ve SMS gönderildi.
+          description: Giriş başarılı, sessionId üretildi.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/LoginResponse' }
-        '400': { description: Eksik veya hatalı veri. }
-        '401': { description: TC veya şifre yanlış. }
-        '500': { description: Sunucu hatası. }
+        '400':
+          description: Eksik veya hatalı veri.
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "the request body could not be decoded or the request may do not include password or tc fields"
+        '401':
+          description: TC veya şifre yanlış.
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "the login inputs are invalid"
+        '500':
+          description: Sunucu hatası.
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "while saving the session id into redis, an error occured"
 
   /auth/login/confirm:
     post:
-      tags: [Authentication]
+      tags: [ Authentication ]
       summary: Giriş Onayı (SMS code Doğrulama)
       description: |
-        Kullanıcının gönderdiği SMS codeu ve sessionId Redis üzerinden doğrulanır.
-        code geçerli ise kullanıcıya access ve refresh token üretilerek gönderilir.
-        Refresh token DB’ye kaydedilir.
+        Kullanıcı code doğruladıktan sonra:
+        - Access token JSON body ile döner
+        - Refresh token ise HttpOnly cookie olarak gönderilir.
       requestBody:
         required: true
         content:
@@ -137,22 +155,38 @@ paths:
             schema: { $ref: '#/components/schemas/ConfirmRequest' }
       responses:
         '200':
-          description: Giriş tamamlandı, tokenlar üretildi.
+          description: Tokenlar üretildi.
+          headers:
+            Set-Cookie:
+              description: |
+                HttpOnly refresh token cookie.
+                Örnek: Refresh-Token=<token>; HttpOnly; Secure; Path=/; Max-Age=604800
+              schema:
+                type: string
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/TokenResponse' }
-        '400': { description: code hatalı veya oturum geçersiz. }
-        '410': { description: codeun süresi dolmuş. }
-        '500': { description: Sunucu hatası. }
+              schema:
+                type: object
+                properties:
+                  accessToken:
+                    type: string
+                    example: "eyJhbGciOiJIUzI1NiIs..."
+        '400':
+          description: code hatalı veya session geçersiz.
+        '401':
+          description: code yanlış.
+        '410':
+          description: code süresi dolmuş.
+        '500':
+          description: Sunucu hatası.
+
 
   /auth/register:
     post:
       tags: [Registration]
       summary: Kullanıcı Kaydı Başlatma
       description: |
-        Kullanıcı bilgileri kontrol edilir; eğer mevcut bir hesap varsa süreç durdurulur.
-        Yeni kullanıcı için SMS doğrulama süreci başlatılır, bilgiler Redis’e geçici olarak kaydedilir.
-        Kullanıcıya sessionId döndürülür.
+        Kullanıcı bilgileri kontrol edilir; yeni kullanıcı geçici olarak Redis'e kaydedilir ve SMS code gönderilir.
       requestBody:
         required: true
         content:
@@ -160,7 +194,7 @@ paths:
             schema: { $ref: '#/components/schemas/RegisterRequest' }
       responses:
         '200':
-          description: Kayıt başlatıldı, SMS doğrulama gönderildi.
+          description: Kayıt başlatıldı, sessionId gönderildi.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/LoginResponse' }
@@ -172,10 +206,7 @@ paths:
       tags: [Registration]
       summary: Kayıt Onayı (SMS code Doğrulama)
       description: |
-        SMS codeu doğrulanır.  
-        Redis’te saklanan kullanıcı bilgileri Auth DB’ye kaydedilir.  
-        Başarılı kayıt sonrası yeni kullanıcı Kafka’ya event olarak yayınlanır.  
-        Ardından tokenlar oluşturularak kullanıcıya teslim edilir.
+        SMS code doğrulanır, kullanıcı DB'ye kaydedilir ve tokenlar üretilir.
       requestBody:
         required: true
         content:
@@ -198,15 +229,14 @@ paths:
       security:
         - bearerAuth: []
       description: |
-        Kullanıcı çıkış yaptığında refresh token DB’den temizlenir.
-        Access token DB’de tutulmadığı için yalnızca refresh token’ın silinmesi yeterlidir.
+        Kullanıcı çıkış yaptığında refresh token DB’den silinir.
       responses:
         '200':
           description: Çıkış başarılı.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/EmptyObject' }
-        '401': { description: Geçersiz veya eksik access token. }
+        '401': { description: Geçersiz access token. }
         '500': { description: Sunucu hatası. }
 
   /auth/refresh:
@@ -214,9 +244,7 @@ paths:
       tags: [Token Operations]
       summary: Access Token Yenileme
       description: |
-        Access token süresi dolduğunda kullanıcı refresh token ile yeni access token talep eder.
-        Refresh token DB’de doğrulanır; geçerliyse yeni access token üretilir.
-        Refresh token geçerli değilse kullanıcı sistemden çıkarılmalıdır.
+        Refresh token doğrulanır ve yeni access token üretilir.
       requestBody:
         required: true
         content:
@@ -228,18 +256,15 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/RefreshResponse' }
-        '401': { description: Refresh token geçersiz veya süresi dolmuş. }
+        '401': { description: Refresh token geçersiz. }
         '500': { description: Sunucu hatası. }
 
   /auth/validation:
     post:
       tags: [Token Operations]
-      summary: Access Token Doğrulama (API Gateway Middleware Kullanır)
+      summary: Access Token Doğrulama
       description: |
-        API Gateway bu endpoint'i her istek için otomatik olarak çağırır.
-        Access token geçerliyse 200 döner ve istek yönlendirilir.
-        Token geçersiz ise 401 döner ve Gateway isteği reddeder.
-        Bu endpoint client tarafından direkt kullanılmaz.
+        API Gateway tarafından kullanılır. Token geçerliyse 200 döner.
       requestBody:
         required: true
         content:
@@ -257,8 +282,7 @@ paths:
       security:
         - bearerAuth: []
       description: |
-        Kullanıcı geçerli access token ile yeni şifre gönderir.
-        Auth DB’de şifre güncellenir.
+        Kullanıcının şifresi güncellenir.
       requestBody:
         required: true
         content:
