@@ -1,5 +1,8 @@
 {{- if .Values.enabled }}
 
+# ==============================================================================
+# Kafka Node Pool - KRaft modunda broker ve controller rollerini tanımlar
+# ==============================================================================
 apiVersion: kafka.strimzi.io/v1
 kind: KafkaNodePool
 metadata:
@@ -17,13 +20,16 @@ spec:
     deleteClaim: {{ .Values.nodePool.storage.deleteClaim }}
 
 ---
+# ==============================================================================
+# Kafka Cluster - Ana Kafka cluster tanımı
+# ==============================================================================
 apiVersion: kafka.strimzi.io/v1
 kind: Kafka
 metadata:
   name: {{ .Values.cluster.name }}
   namespace: {{ .Values.cluster.namespace }}
   annotations:
-    strimzi.io/node-pools: enabled  # NodePool kullan
+    strimzi.io/node-pools: enabled
 spec:
   kafka:
     version: {{ .Values.kafka.version | quote }}
@@ -32,6 +38,8 @@ spec:
       {{- toYaml .Values.kafka.listeners | nindent 6 }}
     config:
       {{- toYaml .Values.kafka.config | nindent 6 }}
+  
+  # Entity Operator - KafkaTopic and KafkaUser CRD management
   entityOperator:
     {{- if .Values.entityOperator.topicOperator.enabled }}
     topicOperator: {}

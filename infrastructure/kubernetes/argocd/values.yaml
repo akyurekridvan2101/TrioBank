@@ -1,9 +1,14 @@
+# ArgoCD Component Configuration
+# Bu dosya ArgoCD'nin kendi Helm chart'ı için kullanılır (eğer varsa)
 
+# ApplicationSet controller - App of Apps pattern için gerekli
 applicationSet:
   enabled: true
 
+# Notifications - Slack/Email bildirimleri için
 notifications:
   enabled: false
 
+# Dex - SSO/OIDC authentication için
 dex:
   enabled: false

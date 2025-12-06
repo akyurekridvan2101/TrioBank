@@ -1,9 +1,12 @@
-
+# Strimzi Kafka Operator Yapılandırması
+# Kafka, KafkaConnect, KafkaTopic gibi CRD'leri yönetir
 strimzi-kafka-operator:
   replicas: 1
   
+  # Tüm namespace'leri izler (multi-tenant setup için)
   watchAnyNamespace: true
 
+  # ArgoCD sync wave - Kafka kümesinden önce deploy edilir
   commonAnnotations:
     argocd.argoproj.io/sync-wave: "300"
 
@@ -15,10 +18,12 @@ strimzi-kafka-operator:
       memory: 2048Mi
       cpu: 1000m
 
+  # Vert.x thread blocking kontrolü için timeout artırımı
   extraEnvs:
     - name: JAVA_TOOL_OPTIONS
       value: "-Dvertx.blockedThreadCheckInterval=300000"
 
+  # Sağlık kontrol probe'ları
   livenessProbe:
     initialDelaySeconds: 120
     periodSeconds: 10

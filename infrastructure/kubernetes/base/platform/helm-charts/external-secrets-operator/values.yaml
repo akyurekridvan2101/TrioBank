@@ -1,8 +1,10 @@
-
+# External Secrets Operator Configuration
+# Vault'tan secret'ları Kubernetes'e sync eder
 external-secrets:
   installCRDs: true
   replicaCount: 1
 
+  # ArgoCD sync wave - Vault'tan sonra deploy edilir
   commonAnnotations:
     argocd.argoproj.io/sync-wave: "100"
 

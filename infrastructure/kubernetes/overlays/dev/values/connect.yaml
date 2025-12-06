@@ -1,4 +1,5 @@
-
+# Kafka Connect - Geliştirme Kaynak Limitleri
+# Yerel geliştirme için optimize edilmiş JVM ve kaynak ayarları
 resources:
   requests:
     memory: 512Mi

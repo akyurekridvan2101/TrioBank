@@ -1,42 +1,29 @@
 {{/*
-================================================================================
-Database Migration Job Template - Shared Reusable Component
-================================================================================
-
-AÇIKLAMA:
-  Database migration'ları için reusable Kubernetes Job template'i.
-  Helm hooks kullanarak install/upgrade öncesi otomatik çalıştırır.
+==============================================================================
+TrioBank - Database Migration Job Template
+Kubernetes Job for automated database schema migrations
+==============================================================================
 
 KULLANIM:
-  Service'in templates/ klasöründe bir migration-job.yaml oluştur:
-  
-  ```yaml
+  Service templates/ klasöründe migration-job.yaml oluştur:
   {{- include "common.migrationJob" . }}
-  ```
 
-GEREKLILIKLER:
-  1. Service klasöründe migrations/ dizini olmalı
-  2. values.yaml'da migration.enabled ve migration.image tanımlı olmalı
-  3. Vault'ta database credentials olmalı (secret.name referansı ile)
+AMAÇ:
+  Database migration'larını Helm hooks kullanarak otomatik çalıştırır.
+  Helm install/upgrade öncesi migration Job'ı tetiklenir.
 
 NE ZAMAN ÇALIŞIR:
-  • helm install → Migration Job çalışır (pre-install hook)
-  • helm upgrade → Migration Job çalışır (pre-upgrade hook)
+  • helm install → Migration Job (pre-install hook)
+  • helm upgrade → Migration Job (pre-upgrade hook)
 
-AVANTAJLAR:
-  ✓ Deployment'tan bağımsız (standalone Job pattern)
-  ✓ Otomatik retry mekanizması (backoffLimit)
-  ✓ Helm hooks ile otomatik tetikleme
-  ✓ Otomatik cleanup (ttlSecondsAfterFinished)
-  ✓ Migration history takibi (.Release.Revision ile versiyonlama)
-
-CONFIGURATION (values.yaml):
-  ```yaml
+VALUES EXAMPLE:
   migration:
     enabled: true
     image: "service-migrate:latest"
     imagePullPolicy: "IfNotPresent"
     jdbcParams: "encrypt=false;trustServerCertificate=true"
+    backoffLimit: 3
+    ttlSecondsAfterFinished: 3600
     resources:
       limits:
         cpu: "200m"
@@ -52,9 +39,10 @@ CONFIGURATION (values.yaml):
   
   secret:
     name: "service-db-credentials"
-  ```
+    usernameKey: "username"  # optional, defaults to "username"
+    passwordKey: "password"  # optional, defaults to "password"
 
-================================================================================
+==============================================================================
 */}}
 
 {{- define "common.migrationJob" -}}
@@ -69,12 +57,9 @@ metadata:
     {{- include (printf "%s.labels" .Chart.Name) . | nindent 4 }}
     app.kubernetes.io/component: database-migration
   annotations:
-    
-    
     helm.sh/hook-delete-policy: before-hook-creation
 spec:
   backoffLimit: {{ .Values.migration.backoffLimit | default 3 }}
-  
   ttlSecondsAfterFinished: {{ .Values.migration.ttlSecondsAfterFinished | default 3600 }}
   
   template:
@@ -91,6 +76,7 @@ spec:
         {{- toYaml .Values.migration.imagePullSecrets | nindent 8 }}
       {{- end }}
       
+      # Create database if not exists
       initContainers:
       - name: create-db
         image: mcr.microsoft.com/mssql-tools
@@ -128,6 +114,7 @@ spec:
               name: {{ $secretName }}
               key: {{ $passwordKey }}
 
+      # Run migrations
       containers:
       - name: db-migration
         image: {{ .Values.migration.image }}
@@ -137,14 +124,14 @@ spec:
         - migrate
         args:
         - -source
-        - file:///migrations                    # Migration dosyaları image içinde
+        - file:///migrations
         - -database
         - {{ printf "sqlserver://$(DB_USERNAME):$(DB_PASSWORD)@%s:%d?database=%s&%s" 
             .Values.database.serviceName 
             (.Values.database.port | int)
             .Values.database.name 
             (.Values.migration.jdbcParams | default "encrypt=false;trustServerCertificate=true") }}
-        - up                                    # Tüm pending migration'ları çalıştır
+        - up
         
         {{- $secretName := "" -}}
         {{- $usernameKey := "username" -}}

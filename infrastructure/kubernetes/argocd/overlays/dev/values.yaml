@@ -1,10 +1,15 @@
+# ArgoCD Component Resource Limits - Development Environment
+# Bu dosya ArgoCD'nin kendi component'leri için resource limitleri tanımlar
+# Local development için düşük resource kullanımı
 
+# ArgoCD Server - UI ve API
 server:
   service:
     type: ClusterIP
   extraArgs:
-    - --insecure
+    - --insecure  # TLS olmadan çalış (local dev)
 
+# Application Controller - GitOps sync engine
 controller:
   resources:
     requests:
@@ -14,6 +19,7 @@ controller:
       cpu: 500m
       memory: 512Mi
 
+# Repo Server - Git repository işlemleri
 repoServer:
   resources:
     requests:
@@ -23,6 +29,7 @@ repoServer:
       cpu: 250m
       memory: 256Mi
 
+# ApplicationSet Controller - App of Apps pattern için
 applicationSet:
   resources:
     requests:
@@ -32,6 +39,7 @@ applicationSet:
       cpu: 100m
       memory: 128Mi
 
+# Redis - Caching ve state management
 redis:
   resources:
     requests:

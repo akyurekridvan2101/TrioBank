@@ -1,4 +1,5 @@
-
+# Kafka UI - Geliştirme Kaynak Limitleri
+# Yerel geliştirme için düşük kaynak kullanımı
 kafka-ui:
   resources:
     requests:

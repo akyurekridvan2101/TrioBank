@@ -1,23 +1,27 @@
 {{- if .Values.enabled }}
 
+# ==============================================================================
+# Kafka Connect Cluster - CDC connector'ları için
+# ==============================================================================
 apiVersion: kafka.strimzi.io/v1beta2
 kind: KafkaConnect
 metadata:
   name: connect
   namespace: triobank
   annotations:
-    strimzi.io/use-connector-resources: "true"  # KafkaConnector CRD kullan
+    strimzi.io/use-connector-resources: "true"
 spec:
   version: {{ .Values.version | quote }}
   replicas: {{ .Values.replicaCount }}
   bootstrapServers: {{ .Values.bootstrapServers }}
   
+  # Derleme yapılandırması - KafkaConnect imaj derlemesi
   {{- if .Values.build.enabled }}
   build:
     output:
       type: docker
       image: {{ .Values.image }}
-      pushSecret: dockerhub-credentials  # Vault'tan gelen secret
+      pushSecret: dockerhub-credentials
     plugins:
       - name: debezium-sqlserver
         artifacts:
@@ -30,6 +34,7 @@ spec:
   config:
     {{- toYaml .Values.config | nindent 4 }}
   
+  # Harici secret'lar - Veritabanı kimlik bilgileri
   {{- if .Values.externalConfiguration }}
   externalConfiguration:
     volumes:
