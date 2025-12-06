@@ -18,7 +18,7 @@ func main() {
 	repo.DataBase = mongoDb
 	repo.SessionManager = redisDb
 	repo.Client = &http.Client{
-		Timeout: time.Second * 8,
+		Timeout: time.Second * 20,
 	}
 	internal.StartRouter(repo)
 }

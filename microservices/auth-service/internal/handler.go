@@ -29,7 +29,7 @@ func (repo Repo) login(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("this endpoint can be used only with post request"))
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
 
 	var data loginData
@@ -84,6 +84,7 @@ func (repo Repo) login(w http.ResponseWriter, r *http.Request) {
 	req.Header.Set("X-Internal-Secret", config.GetEnv("SECRET_KEY"))
 	response, err := repo.Client.Do(req)
 	if err != nil {
+		fmt.Println(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte("an error occured while sending a request to sms service"))
 		return
