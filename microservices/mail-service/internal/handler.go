@@ -4,16 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"os"
 	"strconv"
 	"time"
 )
 
-func sendMailHandler(w http.ResponseWriter, r *http.Request) {
-	senderMail := os.Getenv("SENDER_MAIL")
-	senderPassword := os.Getenv("SENDER_PASSWORD")
-	smtpHost := os.Getenv("SMTP_HOST")
-	smtpPort := os.Getenv("SMTP_PORT")
+func (s *SmtpPool) sendMailHandler(w http.ResponseWriter, r *http.Request) {
+
 	var requestBody string
 	var receiver Receiver
 	if r.Method != http.MethodPost {
@@ -36,7 +32,7 @@ func sendMailHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithDeadline(r.Context(), time.UnixMilli(timeoutInt64))
 	defer cancel()
 	channel := make(chan error)
-	go SendMail(channel, senderMail, senderPassword, smtpHost, smtpPort, receiver)
+	go SendMail(ctx, channel, s, receiver)
 
 	select {
 	case err = <-channel:
