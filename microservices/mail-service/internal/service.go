@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"crypto/tls"
 	"net/smtp"
 	"os"
 )
@@ -18,6 +19,14 @@ func NewSmtpPool(port, host string, auth smtp.Auth, size int) (*SmtpPool, error)
 
 	for i := 0; i < size; i++ {
 		client, err := smtp.Dial(host + ":" + port)
+		if err != nil {
+			smtpPool.Close()
+			return nil, err
+		}
+		err = client.StartTLS(&tls.Config{
+			ServerName: os.Getenv("SMTP_HOST"),
+			MinVersion: tls.VersionTLS12,
+		})
 		if err != nil {
 			smtpPool.Close()
 			return nil, err
