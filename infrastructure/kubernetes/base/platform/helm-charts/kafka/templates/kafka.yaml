@@ -1,0 +1,50 @@
+{{- if .Values.enabled }}
+
+# ==============================================================================
+# Kafka Node Pool - KRaft modunda broker ve controller rollerini tanımlar
+# ==============================================================================
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaNodePool
+metadata:
+  name: {{ .Values.nodePool.name }}
+  namespace: {{ .Values.cluster.namespace }}
+  labels:
+    strimzi.io/cluster: {{ .Values.cluster.name }}
+spec:
+  replicas: {{ .Values.nodePool.replicas }}
+  roles:
+    {{- toYaml .Values.nodePool.roles | nindent 4 }}
+  storage:
+    type: {{ .Values.nodePool.storage.type }}
+    size: {{ .Values.nodePool.storage.size }}
+    deleteClaim: {{ .Values.nodePool.storage.deleteClaim }}
+
+---
+# ==============================================================================
+# Kafka Cluster - Ana Kafka cluster tanımı
+# ==============================================================================
+apiVersion: kafka.strimzi.io/v1
+kind: Kafka
+metadata:
+  name: {{ .Values.cluster.name }}
+  namespace: {{ .Values.cluster.namespace }}
+  annotations:
+    strimzi.io/node-pools: enabled
+spec:
+  kafka:
+    version: {{ .Values.kafka.version | quote }}
+    metadataVersion: {{ .Values.kafka.metadataVersion | quote }}
+    listeners:
+      {{- toYaml .Values.kafka.listeners | nindent 6 }}
+    config:
+      {{- toYaml .Values.kafka.config | nindent 6 }}
+  
+  # Entity Operator - KafkaTopic and KafkaUser CRD management
+  entityOperator:
+    {{- if .Values.entityOperator.topicOperator.enabled }}
+    topicOperator: {}
+    {{- end }}
+    {{- if .Values.entityOperator.userOperator.enabled }}
+    userOperator: {}
+    {{- end }}
+{{- end }}

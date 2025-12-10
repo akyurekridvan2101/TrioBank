@@ -1,0 +1,11 @@
+# Default values for argocd-apps chart
+# Root application bu değerleri override eder (inline values ile)
+
+# Environment seçimi - dev, prod, vb.
+env: dev
+
+# Git branch - hangi branch'ten deploy edilecek
+branch: main
+
+# Git repository URL
+repoURL: https://github.com/TrioBank/triobank.git

@@ -1,0 +1,10 @@
+# Kafka UI - Geliştirme Kaynak Limitleri
+# Yerel geliştirme için düşük kaynak kullanımı
+kafka-ui:
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

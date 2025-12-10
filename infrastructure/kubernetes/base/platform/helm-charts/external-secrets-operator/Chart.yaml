@@ -1,0 +1,12 @@
+
+apiVersion: v2
+name: external-secrets-operator
+description: External Secrets Operator - Harici secret yönetim sistemi
+type: application
+version: 0.1.0
+appVersion: "0.9.11"
+
+dependencies:
+  - name: external-secrets
+    version: "0.9.11"
+    repository: https://charts.external-secrets.io

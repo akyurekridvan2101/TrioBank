@@ -1,0 +1,59 @@
+# ==============================================================================
+# Microservices ApplicationSet
+# Otomatik olarak services/ klasöründeki tüm mikroservisleri deploy eder
+# ==============================================================================
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: services
+  namespace: argocd
+spec:
+  # Git Directory Generator - services/*/k8s pattern'ine uyan klasörleri bulur
+  # Örnek: services/auth-service/k8s, services/mail-service/k8s
+  generators:
+    - git:
+        repoURL: {{ .Values.repoURL }}
+        revision: {{ .Values.branch }}
+        directories:
+          - path: 'services/*/k8s'  # Wildcard pattern ile tüm servisler
+
+  # Application template - Her mikroservis için uygulanır
+  template:
+    metadata:
+      name: '{{`{{path[1]}}`}}'  # Servis adı (path'in 2. elemanı)
+      namespace: argocd
+      annotations:
+        argocd.argoproj.io/sync-wave: "1000"  # Platform servislerinden sonra deploy edilir
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: default
+
+      # Git source configuration
+      source:
+        repoURL: {{ .Values.repoURL }}
+        targetRevision: {{ .Values.branch }}
+        path: '{{`{{path}}`}}'  # services/{service-name}/k8s
+        helm:
+          valueFiles:
+            - values.yaml                                    # Base values
+            - overlays/{{ .Values.env }}/values.yaml         # Environment-specific overrides
+
+      # Deployment destination
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: triobank
+
+      # Sync policy - Automated GitOps
+      syncPolicy:
+        automated:
+          prune: true       # Silinen kaynakları otomatik temizle
+          selfHeal: true    # Manuel değişiklikleri geri al
+        syncOptions:
+          - CreateNamespace=true
+        retry:
+          limit: 5
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m
