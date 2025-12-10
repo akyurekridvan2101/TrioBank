@@ -1,5 +1,5 @@
 apiVersion: v2
-name: ledger
+name: ledger-service
 description: Ledger Service - CDC Connector and Future Application
 type: application
 version: 0.1.0

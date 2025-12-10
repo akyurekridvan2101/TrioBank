@@ -1,8 +1,88 @@
 
 commonAnnotations:
-  argocd.argoproj.io/sync-wave: "1000"
+  argocd.argoproj.io/sync-wave: "10"
+
+replicaCount: 1
+
+image:
+  repository: triobank/ledger-service
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets:
+  - name: dockerhub-credentials
+
+serviceAccount:
+  create: true
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/path: "/actuator/prometheus"
+  prometheus.io/port: "8082"
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext:
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 8082
+  targetPort: 8082
+
+ingress:
+  enabled: false
+  className: "nginx"
+  annotations: {}
+  hosts:
+    - host: ledger-service.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 100m
+    memory: 512Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
 
 
+livenessProbe:
+  httpGet:
+    path: /actuator/health/liveness
+    port: 8082
+  initialDelaySeconds: 60
+  periodSeconds: 10 
+
+readinessProbe:
+  httpGet:
+    path: /actuator/health/readiness
+    port: 8082
+  initialDelaySeconds: 30
+  periodSeconds: 10
+
+env:
+  SERVER_PORT: "8082"
+  SPRING_PROFILES_ACTIVE: "prod"
+  LOGGING_LEVEL_ROOT: "INFO"
+
+# Database Configuration (MSSQL)
 databases:
   mssql:
     enabled: true
@@ -12,14 +92,13 @@ databases:
     externalName: ""                 # Override in overlays (e.g., host.docker.internal)
     annotations:
       description: "Ledger primary transactional database"
-  
-  
 
 database:
   name: ledger_db                    # Database name
   port: 1433                         # MSSQL port
   serviceName: ledger-mssql
 
+# Migration Job
 migration:
   enabled: true
   image: "akyurekridvan2101/ledger-migrate:latest"
@@ -31,12 +110,12 @@ migration:
     limits:
       cpu: "200m"
       memory: "128Mi"
-      
     requests:
       cpu: "50m"
       memory: "64Mi"
 
 
+# Kafka & Debezium Configuration
 kafka:
   bootstrapServers: "kafka-kafka-bootstrap.triobank:9092"
 
@@ -99,6 +178,3 @@ externalSecrets:
         property: db_username
       - secretKey: password
         property: db_password
-  
-  
-
