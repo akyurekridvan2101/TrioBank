@@ -222,6 +222,8 @@ func (repo Repo) Register(w http.ResponseWriter, r *http.Request) {
 	user.Email = data.Email
 	user.Tel = data.Tel
 	user.Tc = data.Tc
+	user.IsActive = true
+	user.CreatedAt = time.Now()
 	hashedPassword, err := pkg.HashPassword(data.Password)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -260,7 +262,7 @@ func (repo Repo) Register(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("something went wrong in server"))
 		return
 	}
-	err = repo.SessionManager.saveUser(ctx, user, base64.URLEncoding.EncodeToString(sessionId))
+	err = repo.SessionManager.saveUser(ctx, user)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte("something went wrong while saving user into redis"))
@@ -311,5 +313,89 @@ func (repo Repo) Register(w http.ResponseWriter, r *http.Request) {
 }
 
 func (repo Repo) RegisterConfirm(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	var data confirmData
+	err := json.NewDecoder(r.Body).Decode(&data)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte("the request body should include only session id and verification code"))
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), time.Minute*5)
+	defer cancel()
+	code, err := strconv.ParseInt(data.Code, 10, 64)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	userId, err := repo.SessionManager.controlSessionId(ctx, data.SessionId, code)
+	if err != nil {
+		if errors.Is(err, ErrCodeIsNotCorrect) {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte("the code is not correct or session id invalid"))
+			return
+		} else if errors.Is(err, ErrCodeNotFound) {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte("the code is not found"))
+			return
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("something went wrong in server"))
+		return
+	}
+	user, err := repo.SessionManager.getUser(ctx, userId)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("something went wrong in server"))
+		return
+	}
+
+	err = repo.DataBase.createUser(ctx, user)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("something went wrong while creating user in db"))
+		return
+	}
+
+	refreshToken, accessToken, err := repo.DataBase.createRefreshAndAccessToken(ctx, user.Id)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("something went wrong while creating tokens"))
+		return
+	}
+	cookie := http.Cookie{
+		Name:     "Refresh-Token",
+		Value:    refreshToken,
+		Secure:   true,
+		HttpOnly: true,
+		Path:     "/",
+		MaxAge:   7 * 24 * 60 * 60,
+	}
+	ret, err := json.Marshal(struct {
+		AccessToken string `json:"access_token"`
+	}{accessToken})
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("something went wrong in sending access token"))
+		return
+	}
+
+	// kafka event yayınlanacak
+	err = repo.SessionManager.removeLimitByTc(ctx, user.Tc)
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+	err = repo.SessionManager.deleteSessionId(ctx, data.SessionId)
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+	http.SetCookie(w, &cookie)
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(ret)
 
 }

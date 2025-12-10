@@ -50,8 +50,11 @@ type confirmData struct {
 
 type DataBaseI interface {
 	loginControl(ctx context.Context, data loginData) (User, error)
-	createRefreshAndAccessToken(ctx context.Context, id primitive.ObjectID) (string, string, error)
 	isUserExist(ctx context.Context, tc string) error
+
+	createRefreshAndAccessToken(ctx context.Context, id primitive.ObjectID) (string, string, error)
+
+	createUser(ctx context.Context, user User) error
 }
 
 type SessionManagerI interface {
@@ -64,5 +67,6 @@ type SessionManagerI interface {
 	setAndControlLimitByTc(ctx context.Context, tc string) (bool, error)
 	removeLimitByTc(ctx context.Context, tc string) error
 
-	saveUser(ctx context.Context, user User, sessionId string) error
+	saveUser(ctx context.Context, user User) error
+	getUser(ctx context.Context, userId primitive.ObjectID) (User, error)
 }

@@ -80,6 +80,15 @@ func (db MongoDB) isUserExist(ctx context.Context, tc string) error {
 	return nil
 }
 
+func (db MongoDB) createUser(ctx context.Context, user User) error {
+	collection := db.Db.Collection("Users")
+	_, err := collection.InsertOne(ctx, user)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (db RedisDB) saveSessionId(ctx context.Context, userId primitive.ObjectID, sessionId string, code int64) error {
 	var value RedisSessionData
 	value.UserId = userId
@@ -150,8 +159,8 @@ func (db RedisDB) removeLimitByTc(ctx context.Context, tc string) error {
 	return nil
 }
 
-func (db RedisDB) saveUser(ctx context.Context, user User, sessionId string) error {
-	key := "user:" + sessionId
+func (db RedisDB) saveUser(ctx context.Context, user User) error {
+	key := "user:" + user.Id.String()
 	value, err := json.Marshal(user)
 	if err != nil {
 		return err
@@ -161,6 +170,20 @@ func (db RedisDB) saveUser(ctx context.Context, user User, sessionId string) err
 		return err
 	}
 	return nil
+}
+
+func (db RedisDB) getUser(ctx context.Context, userId primitive.ObjectID) (User, error) {
+	key := "user:" + userId.String()
+	var user User
+	result, err := db.Db.Get(ctx, key).Bytes()
+	if err != nil {
+		return User{}, nil
+	}
+	err = json.Unmarshal(result, &user)
+	if err != nil {
+		return User{}, err
+	}
+	return user, err
 }
 
 func StartMongoDB() *mongo.Database {
