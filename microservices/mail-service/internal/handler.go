@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -14,7 +15,14 @@ func sendMailHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	deadline := r.Header.Get("X-Request-Deadline")
+	deadlineInt64, err := strconv.ParseInt(deadline, 10, 64)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	ctx, cancel := context.WithDeadline(r.Context(), time.UnixMilli(deadlineInt64))
 	defer cancel()
 	err = SendMail(ctx, receiver)
 	if err != nil {
