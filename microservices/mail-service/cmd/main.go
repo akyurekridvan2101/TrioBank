@@ -8,8 +8,6 @@ import (
 	"github.com/joho/godotenv"
 )
 
-var s *internal.SmtpPool
-
 func init() {
 	err := godotenv.Load("./config/.env")
 	if err != nil && os.IsExist(err) {
@@ -19,5 +17,5 @@ func init() {
 
 func main() {
 	fmt.Println("router başladı")
-	internal.StartRouter(s)
+	internal.StartRouter()
 }
