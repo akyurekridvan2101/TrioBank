@@ -4,11 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"strconv"
 	"time"
 )
 
-func (s *SmtpPool) sendMailHandler(w http.ResponseWriter, r *http.Request) {
+func sendMailHandler(w http.ResponseWriter, r *http.Request) {
 	var receiver Receiver
 	err := json.NewDecoder(r.Body).Decode(&receiver)
 	if err != nil {
@@ -16,7 +15,7 @@ func (s *SmtpPool) sendMailHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
-	defer cancel() 
+	defer cancel()
 	err = SendMail(ctx, receiver)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

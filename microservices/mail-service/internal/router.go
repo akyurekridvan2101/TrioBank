@@ -6,9 +6,9 @@ import (
 	"os"
 )
 
-func StartRouter(s *SmtpPool) {
+func StartRouter() {
 
-	http.Handle("/send", middleWare(s.sendMailHandler))
+	http.Handle("/send", middleWare(sendMailHandler))
 
 	err := http.ListenAndServe(os.Getenv("MAIL_SERVICE_PORT"), nil)
 	if err != nil {
