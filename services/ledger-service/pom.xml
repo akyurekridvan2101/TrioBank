@@ -9,10 +9,10 @@
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.triobank</groupId>
-	<artifactId>ledger</artifactId>
+	<artifactId>ledger-service</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
-	<name>ledger</name>
-	<description>Ledger microservice for TrioBank</description>
+	<name>ledger-service</name>
+	<description>Ledger Service for TrioBank</description>
 	<url/>
 	<licenses>
 		<license/>
