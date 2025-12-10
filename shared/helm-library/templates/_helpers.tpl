@@ -64,6 +64,17 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
+Create the name of the service account to use
+*/}}
+{{- define "common.serviceAccountName" -}}
+{{- if .Values.serviceAccount.create }}
+{{- default (include "common.fullname" .) .Values.serviceAccount.name }}
+{{- else }}
+{{- default "default" .Values.serviceAccount.name }}
+{{- end }}
+{{- end }}
+
+{{/*
 Kafka cluster bootstrap server adresi
 values.yaml'da kafka.brokers ile override edilebilir
 Default: triobank namespace'deki Kafka cluster
