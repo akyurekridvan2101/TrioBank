@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func sendMailHandler(w http.ResponseWriter, r *http.Request) {
+func (c Client) sendMailHandler(w http.ResponseWriter, r *http.Request) {
 	var receiver Receiver
 	err := json.NewDecoder(r.Body).Decode(&receiver)
 	if err != nil {
@@ -24,7 +24,7 @@ func sendMailHandler(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithDeadline(r.Context(), time.UnixMilli(deadlineInt64))
 	defer cancel()
-	err = SendMail(ctx, receiver)
+	err = SendMail(ctx, c, receiver)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return

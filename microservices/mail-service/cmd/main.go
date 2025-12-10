@@ -6,6 +6,7 @@ import (
 
 	"github.com/TrioBank/triobank-platform/microservices/mail-service/internal"
 	"github.com/joho/godotenv"
+	"github.com/resend/resend-go/v3"
 )
 
 func init() {
@@ -16,6 +17,8 @@ func init() {
 }
 
 func main() {
+	var client internal.Client
+	client.MailClient = resend.NewClient(os.Getenv("RESEND_API_KEY"))
 	fmt.Println("router başladı")
-	internal.StartRouter()
+	internal.StartRouter(client)
 }
