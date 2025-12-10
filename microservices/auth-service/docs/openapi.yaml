@@ -44,13 +44,16 @@ components:
 
     ConfirmRequest:
       type: object
-      required: [sessionId, code]
+      required: [session-id, code]
       properties:
-        sessionId:
+        session-id:
           type: string
+          description: Base64 URL encoded session ID (login endpoint'inden dönen)
           example: "YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXo"
         code:
           type: string
+          description: 4 haneli doğrulama kodu (1000-9999 arası)
+          pattern: "^[0-9]{4}$"
           example: "1234"
 
     RegisterRequest:
@@ -104,9 +107,20 @@ paths:
       tags: [Authentication]
       summary: Kullanıcı Girişi
       description: |
-        Kullanıcı giriş bilgileri Auth DB’de doğrulanır.
-        Bilgiler doğruysa sessionId ve doğrulama codeu üretilir.
+        Kullanıcı giriş bilgileri Auth DB'de doğrulanır.
+        Bilgiler doğruysa sessionId ve doğrulama kodu üretilir.
         sessionId Base64 URL encoded bir random 32-byte değerdir.
+        
+        **Rate Limiting:** Kullanıcı başına aynı anda yalnızca bir aktif login işlemi yapılabilir.
+        Önceki işlem hala aktifse (3 dakika içinde) 429 döner.
+        
+        **Akış:**
+        1. TC ve şifre MongoDB'de doğrulanır
+        2. Redis'te rate limit kontrolü yapılır (SetNX ile atomic)
+        3. 4 haneli doğrulama kodu üretilir (1000-9999)
+        4. Session ID ve kod Redis'e kaydedilir (3 dk TTL)
+        5. Doğrulama kodu kullanıcının email adresine gönderilir
+        6. Session ID client'a döner
       requestBody:
         required: true
         content:
@@ -114,7 +128,7 @@ paths:
             schema: { $ref: '#/components/schemas/LoginRequest' }
       responses:
         '200':
-          description: Giriş başarılı, sessionId üretildi.
+          description: Giriş başarılı, sessionId üretildi ve doğrulama kodu email'e gönderildi.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/LoginResponse' }
@@ -132,22 +146,64 @@ paths:
               schema:
                 type: string
                 example: "the login inputs are invalid"
+        '405':
+          description: Yalnızca POST metodu kabul edilir.
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "this endpoint can be used only with post request"
+        '429':
+          description: Bu kullanıcı için zaten aktif bir login işlemi var (3 dakika bekleyin).
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "already there is an active process in redis"
         '500':
           description: Sunucu hatası.
           content:
             text/plain:
               schema:
                 type: string
-                example: "while saving the session id into redis, an error occured"
+              examples:
+                codeGeneration:
+                  summary: Kod üretim hatası
+                  value: "while generating the code, an error occured"
+                sessionIdGeneration:
+                  summary: Session ID üretim hatası
+                  value: "while generating the session id, an error occured"
+                redisSave:
+                  summary: Redis kayıt hatası
+                  value: "while saving the session id into redis, an error occured"
+                mailError:
+                  summary: Email gönderim hatası
+                  value: "something went wrong while sending sms"
+                limitDelete:
+                  summary: Rate limit silme hatası
+                  value: "something went wrong while deleting limit in redis"
+                timeout:
+                  summary: Timeout hatası
+                  value: "timeout error occured"
 
   /auth/login/confirm:
     post:
-      tags: [ Authentication ]
-      summary: Giriş Onayı (SMS code Doğrulama)
+      tags: [Authentication]
+      summary: Giriş Onayı (Email Kodu Doğrulama)
       description: |
-        Kullanıcı code doğruladıktan sonra:
+        Kullanıcı email'e gelen doğrulama kodunu onaylar.
+        Başarılı doğrulama sonrası:
         - Access token JSON body ile döner
-        - Refresh token ise HttpOnly cookie olarak gönderilir.
+        - Refresh token HttpOnly cookie olarak set edilir (7 gün geçerli)
+        
+        **Not:** Session ID 3 dakika içinde expire olur, kullanıcı bu sürede onaylamalıdır.
+        
+        **Akış:**
+        1. Session ID ve kod Redis'te doğrulanır
+        2. Mevcut refresh tokenlar pasif yapılır
+        3. Yeni refresh ve access token üretilir
+        4. Refresh token MongoDB'ye kaydedilir
+        5. Session ID Redis'ten silinir
       requestBody:
         required: true
         content:
@@ -159,7 +215,7 @@ paths:
           headers:
             Set-Cookie:
               description: |
-                HttpOnly refresh token cookie.
+                HttpOnly refresh token cookie (7 gün geçerli).
                 Örnek: Refresh-Token=<token>; HttpOnly; Secure; Path=/; Max-Age=604800
               schema:
                 type: string
@@ -168,17 +224,59 @@ paths:
               schema:
                 type: object
                 properties:
-                  accessToken:
+                  access_token:
                     type: string
+                    description: JWT access token
                     example: "eyJhbGciOiJIUzI1NiIs..."
         '400':
-          description: code hatalı veya session geçersiz.
+          description: Request body hatalı veya kod formatı yanlış.
+          content:
+            text/plain:
+              schema:
+                type: string
+              examples:
+                bodyError:
+                  summary: Request body hatası
+                  value: "the request body should include only session id and verification code"
+                codeTypeError:
+                  summary: Kod tipi hatası
+                  value: "code type is not correct"
         '401':
-          description: code yanlış.
-        '410':
-          description: code süresi dolmuş.
+          description: Kod yanlış veya session ID geçersiz/expire olmuş.
+          content:
+            text/plain:
+              schema:
+                type: string
+              examples:
+                incorrectCode:
+                  summary: Kod yanlış
+                  value: "the code is not correct or session id invalid"
+                notFound:
+                  summary: Session bulunamadı (expire olmuş)
+                  value: "the code is not found"
+        '405':
+          description: Yalnızca POST metodu kabul edilir.
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "only post request is allowed"
         '500':
           description: Sunucu hatası.
+          content:
+            text/plain:
+              schema:
+                type: string
+              examples:
+                tokenError:
+                  summary: Token üretim hatası
+                  value: "something went wrong in creating refresh and access token"
+                sessionDeleteError:
+                  summary: Session silme hatası
+                  value: "deleting session data in redis rised an error"
+                sendError:
+                  summary: Response gönderim hatası
+                  value: "something went wrong in sending access token"
 
 
   /auth/register:

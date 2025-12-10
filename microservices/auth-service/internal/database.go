@@ -122,6 +122,19 @@ func (db RedisDB) controlSessionId(ctx context.Context, sessionId string, code i
 	}
 	return value.UserId, nil
 }
+func (db RedisDB) setAndControlLimit(ctx context.Context, userId primitive.ObjectID) (bool, error) {
+	key := "limit:" + userId.String()
+	result, err := db.Db.SetNX(ctx, key, "limited", 3*time.Minute).Result()
+	return result, err
+}
+func (db RedisDB) removeLimit(ctx context.Context, userId primitive.ObjectID) error {
+	key := "limit:" + userId.String()
+	_, err := db.Db.Del(ctx, key).Result()
+	if err != nil {
+		return err
+	}
+	return nil
+}
 
 func StartMongoDB() *mongo.Database {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)

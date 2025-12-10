@@ -48,6 +48,18 @@ func (repo Repo) login(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("the login inputs are invalid"))
 		return
 	}
+
+	result, err := repo.SessionManager.setAndControlLimit(ctx, user.Id)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	if !result {
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte("already there is an active process in redis"))
+		return
+	}
+
 	code, err := rand.Int(rand.Reader, big.NewInt(9000))
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -77,18 +89,26 @@ func (repo Repo) login(w http.ResponseWriter, r *http.Request) {
 	select {
 	case x := <-errChannel:
 		if x != nil {
+			err = repo.SessionManager.removeLimit(ctx, user.Id)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				fmt.Print(x.Error())
+				_, _ = w.Write([]byte("something went wrong while deleting limit in redis"))
+				return
+			}
 			w.WriteHeader(http.StatusInternalServerError)
 			fmt.Print(x.Error())
-			_, _ = w.Write([]byte("something wen wrong while sending sms"))
+			_, _ = w.Write([]byte("something went wrong while sending sms"))
 			return
 		}
-		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(base64.URLEncoding.EncodeToString(sessionId))
 	case <-ctx.Done():
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte("timeout error occured"))
 		return
 	}
+
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(base64.URLEncoding.EncodeToString(sessionId))
 }
 
 func (repo Repo) Confirm(w http.ResponseWriter, r *http.Request) {
@@ -162,13 +182,17 @@ func (repo Repo) Confirm(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("something went wrong in sending access token"))
 		return
 	}
-
+	err = repo.SessionManager.removeLimit(ctx, userId)
+	if err != nil {
+		fmt.Println("removing limit error in confirm ednpoint", err)
+	}
 	http.SetCookie(w, &cookie)
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(ret)
 }
 
 func (repo Repo) Register(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
@@ -187,7 +211,7 @@ func (repo Repo) Register(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	defer r.Body.Close()
+
 	user.Name = data.name
 	user.Surname = data.surname
 	user.Email = data.email
