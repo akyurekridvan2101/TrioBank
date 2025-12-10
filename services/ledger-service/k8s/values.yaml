@@ -78,9 +78,18 @@ readinessProbe:
   periodSeconds: 10
 
 env:
-  SERVER_PORT: "8082"
   SPRING_PROFILES_ACTIVE: "prod"
   LOGGING_LEVEL_ROOT: "INFO"
+
+# ConfigMap Environment Variables
+config:
+  APP_ENV: "prod"
+  SERVER_PORT: "8082"
+  # Kafka Configs
+  KAFKA_BOOTSTRAP_SERVERS: "kafka-kafka-bootstrap.triobank.svc.cluster.local:9092"
+  KAFKA_ENABLED: "true"
+  # Database Connection String (Using Service Name from Helm)
+  SPRING_DATASOURCE_URL: "jdbc:sqlserver://ledger-mssql.triobank.svc.cluster.local:1433;databaseName=ledger_db;encrypt=false;trustServerCertificate=true"
 
 # Database Configuration (MSSQL)
 databases:
