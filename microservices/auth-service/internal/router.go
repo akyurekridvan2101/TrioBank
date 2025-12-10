@@ -11,7 +11,9 @@ func StartRouter(r Repo) {
 	// handler will be placed here
 
 	http.HandleFunc("/auth/login", middleware(r.login))
-	http.HandleFunc("/auth/login/confirm", middleware(r.Confirm))
+	http.HandleFunc("/auth/login/confirm", middleware(r.LoginConfirm))
+	http.HandleFunc("/auth/register", middleware(r.Register))
+	http.HandleFunc("/auth/register/confirm", middleware(r.RegisterConfirm))
 
 	//http.HandleFunc("/auth/register", middleware(r.))
 

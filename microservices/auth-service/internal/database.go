@@ -122,14 +122,41 @@ func (db RedisDB) controlSessionId(ctx context.Context, sessionId string, code i
 	}
 	return value.UserId, nil
 }
-func (db RedisDB) setAndControlLimit(ctx context.Context, userId primitive.ObjectID) (bool, error) {
+func (db RedisDB) setAndControlLimitById(ctx context.Context, userId primitive.ObjectID) (bool, error) {
 	key := "limit:" + userId.String()
 	result, err := db.Db.SetNX(ctx, key, "limited", 3*time.Minute).Result()
 	return result, err
 }
-func (db RedisDB) removeLimit(ctx context.Context, userId primitive.ObjectID) error {
+func (db RedisDB) setAndControlLimitByTc(ctx context.Context, tc string) (bool, error) {
+	key := "limit:" + tc
+	result, err := db.Db.SetNX(ctx, key, "limited", 3*time.Minute).Result()
+	return result, err
+}
+
+func (db RedisDB) removeLimitById(ctx context.Context, userId primitive.ObjectID) error {
 	key := "limit:" + userId.String()
 	_, err := db.Db.Del(ctx, key).Result()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+func (db RedisDB) removeLimitByTc(ctx context.Context, tc string) error {
+	key := "limit:" + tc
+	_, err := db.Db.Del(ctx, key).Result()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (db RedisDB) saveUser(ctx context.Context, user User, sessionId string) error {
+	key := "user:" + sessionId
+	value, err := json.Marshal(user)
+	if err != nil {
+		return err
+	}
+	_, err = db.Db.Set(ctx, key, value, 4*time.Minute).Result()
 	if err != nil {
 		return err
 	}

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/TrioBank/triobank-platform/microservices/auth-service/pkg"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type Repo struct {
@@ -49,7 +50,7 @@ func (repo Repo) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := repo.SessionManager.setAndControlLimit(ctx, user.Id)
+	result, err := repo.SessionManager.setAndControlLimitById(ctx, user.Id)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -89,7 +90,7 @@ func (repo Repo) login(w http.ResponseWriter, r *http.Request) {
 	select {
 	case x := <-errChannel:
 		if x != nil {
-			err = repo.SessionManager.removeLimit(ctx, user.Id)
+			err = repo.SessionManager.removeLimitById(ctx, user.Id)
 			if err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
 				fmt.Print(x.Error())
@@ -102,16 +103,19 @@ func (repo Repo) login(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	case <-ctx.Done():
+		_ = repo.SessionManager.removeLimitById(context.Background(), user.Id)
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte("timeout error occured"))
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(base64.URLEncoding.EncodeToString(sessionId))
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"sessionId": base64.URLEncoding.EncodeToString(sessionId),
+	})
 }
 
-func (repo Repo) Confirm(w http.ResponseWriter, r *http.Request) {
+func (repo Repo) LoginConfirm(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -182,7 +186,7 @@ func (repo Repo) Confirm(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("something went wrong in sending access token"))
 		return
 	}
-	err = repo.SessionManager.removeLimit(ctx, userId)
+	err = repo.SessionManager.removeLimitById(ctx, userId)
 	if err != nil {
 		fmt.Println("removing limit error in confirm ednpoint", err)
 	}
@@ -199,12 +203,12 @@ func (repo Repo) Register(w http.ResponseWriter, r *http.Request) {
 	}
 	var user User
 	var data struct {
-		name     string `json:"name"`
-		surname  string `json:"surname"`
-		email    string `json:"email"`
-		password string `json:"password"`
-		tel      string `json:"tel"`
-		tc       string `json:"tc"`
+		Name     string `json:"name"`
+		Surname  string `json:"surname"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
+		Tel      string `json:"tel"`
+		Tc       string `json:"tc"`
 	}
 	err := json.NewDecoder(r.Body).Decode(&data)
 	if err != nil {
@@ -212,12 +216,13 @@ func (repo Repo) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user.Name = data.name
-	user.Surname = data.surname
-	user.Email = data.email
-	user.Tel = data.tel
-	user.Tc = data.tc
-	hashedPassword, err := pkg.HashPassword(data.password)
+	user.Id = primitive.NewObjectID()
+	user.Name = data.Name
+	user.Surname = data.Surname
+	user.Email = data.Email
+	user.Tel = data.Tel
+	user.Tc = data.Tc
+	hashedPassword, err := pkg.HashPassword(data.Password)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -225,6 +230,17 @@ func (repo Repo) Register(w http.ResponseWriter, r *http.Request) {
 	user.HashedPassword = hashedPassword
 	ctx, cancel := context.WithTimeout(r.Context(), time.Second*5)
 	defer cancel()
+
+	result, err := repo.SessionManager.setAndControlLimitByTc(ctx, user.Tc)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	if !result {
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte("already there is an active process in redis"))
+		return
+	}
 
 	err = repo.DataBase.isUserExist(ctx, user.Tc)
 	if errors.Is(err, ErrUserAlreadyExist) {
@@ -236,6 +252,64 @@ func (repo Repo) Register(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("something went wrong in server"))
 		return
 	}
-	//	repo.Client
+
+	sessionId := make([]byte, 32)
+	_, err = rand.Read(sessionId)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("something went wrong in server"))
+		return
+	}
+	err = repo.SessionManager.saveUser(ctx, user, base64.URLEncoding.EncodeToString(sessionId))
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("something went wrong while saving user into redis"))
+		return
+	}
+
+	code, err := rand.Int(rand.Reader, big.NewInt(9000))
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("something went wrong while creating verification code"))
+		return
+	}
+
+	err = repo.SessionManager.saveSessionId(ctx, user.Id, base64.URLEncoding.EncodeToString(sessionId), code.Int64()+1000)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("something went wrong while saving session id"))
+		return
+	}
+	reqData := smsRequestData{user.Email, strconv.FormatInt(code.Int64()+1000, 10)}
+	channel := make(chan error, 1)
+	go SendMail(ctx, repo, reqData, channel)
+	select {
+	case <-ctx.Done():
+		_ = repo.SessionManager.removeLimitByTc(context.Background(), user.Tc)
+		w.WriteHeader(http.StatusRequestTimeout)
+		_, _ = w.Write([]byte("timeout"))
+		return
+	case x := <-channel:
+		if x != nil {
+			err = repo.SessionManager.removeLimitByTc(ctx, user.Tc)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				fmt.Print(x.Error())
+				_, _ = w.Write([]byte("something went wrong while deleting limit in redis"))
+				return
+			}
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Print(x.Error())
+			_, _ = w.Write([]byte("something went wrong while sending sms"))
+			return
+		}
+	}
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"sessionId": base64.URLEncoding.EncodeToString(sessionId),
+	})
+}
+
+func (repo Repo) RegisterConfirm(w http.ResponseWriter, r *http.Request) {
 
 }

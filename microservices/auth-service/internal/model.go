@@ -59,6 +59,10 @@ type SessionManagerI interface {
 	controlSessionId(ctx context.Context, sessionId string, code int64) (primitive.ObjectID, error)
 	deleteSessionId(ctx context.Context, sessionId string) error
 
-	setAndControlLimit(ctx context.Context, userId primitive.ObjectID) (bool, error)
-	removeLimit(ctx context.Context, userId primitive.ObjectID) error
+	setAndControlLimitById(ctx context.Context, userId primitive.ObjectID) (bool, error)
+	removeLimitById(ctx context.Context, userId primitive.ObjectID) error
+	setAndControlLimitByTc(ctx context.Context, tc string) (bool, error)
+	removeLimitByTc(ctx context.Context, tc string) error
+
+	saveUser(ctx context.Context, user User, sessionId string) error
 }
