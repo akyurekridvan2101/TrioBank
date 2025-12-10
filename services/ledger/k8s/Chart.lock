@@ -1,0 +1,6 @@
+dependencies:
+- name: common
+  repository: file://../../../shared-templates/common
+  version: 0.1.1
+digest: sha256:6cd5ce20d98135a4b7a336139af5f57d71a1171ac5340590a2cc961ea8184ee2
+generated: "2025-12-11T23:25:39.696968949+03:00"

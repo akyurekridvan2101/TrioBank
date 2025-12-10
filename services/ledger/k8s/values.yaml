@@ -1,0 +1,104 @@
+
+commonAnnotations:
+  argocd.argoproj.io/sync-wave: "1000"
+
+
+databases:
+  mssql:
+    enabled: true
+    serviceName: ledger-mssql
+    type: mssql
+    portName: mssql
+    externalName: ""                 # Override in overlays (e.g., host.docker.internal)
+    annotations:
+      description: "Ledger primary transactional database"
+  
+  
+
+database:
+  name: ledger_db                    # Database name
+  port: 1433                         # MSSQL port
+  serviceName: ledger-mssql
+
+migration:
+  enabled: true
+  image: "akyurekridvan2101/ledger-migrate:latest"
+  imagePullPolicy: "Always"
+  imagePullSecrets:
+    - name: dockerhub-credentials
+  jdbcParams: "encrypt=false;trustServerCertificate=true"
+  resources:
+    limits:
+      cpu: "200m"
+      memory: "128Mi"
+      
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+
+
+kafka:
+  bootstrapServers: "kafka-kafka-bootstrap.triobank:9092"
+
+connector:
+  enabled: true
+  name: "ledger-cdc-connector"
+  secretVolumeName: "ledger-db-credentials"
+  
+  database:
+    hostname: "ledger-mssql.triobank"
+    port: 1433
+    names: "ledger_db"
+    encrypt: "false"
+    trustServerCertificate: "true"
+  
+  table:
+    include: "dbo.outbox_events"
+  
+  topic:
+    prefix: "ledger"
+  
+  snapshot:
+    mode: "initial"
+  
+  outbox:
+    routeByField: "aggregate_type"
+    topicReplacement: "triobank.local.ledger.${routedByValue}.v1"
+    fields:
+      id: "id"
+      key: "aggregate_id"
+      type: "type"
+      payload: "payload"
+      timestamp: "created_at"
+    tombstoneOnEmpty: "false"
+    expandJsonPayload: "true"
+  
+  performance:
+    pollInterval: "500"
+    maxBatchSize: "2048"
+  
+  errors:
+    tolerance: "all"
+    logEnable: "true"
+    logMessages: "true"
+  
+  heartbeat:
+    interval: "60000"
+    topicPrefix: "__debezium-heartbeat"
+  
+  tombstones: "true"
+
+externalSecrets:
+  - name: db-mssql
+    enabled: true
+    vaultPath: secret/dev/services/ledger
+    targetSecret: ledger-db-credentials      # K8s Secret name
+    refreshInterval: "1h"
+    fields:
+      - secretKey: username
+        property: db_username
+      - secretKey: password
+        property: db_password
+  
+  
+

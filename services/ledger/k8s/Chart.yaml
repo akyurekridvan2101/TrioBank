@@ -1,0 +1,11 @@
+apiVersion: v2
+name: ledger
+description: Ledger Service - CDC Connector and Future Application
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+
+dependencies:
+  - name: common
+    version: "0.1.1"
+    repository: "file://../../../shared-templates/common"
