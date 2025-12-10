@@ -34,14 +34,12 @@ func SendMail(ctx context.Context, repo Repo, requestData smsRequestData, errCha
 		errChannel <- err
 		return
 	}
-	if response.StatusCode != http.StatusOK && response.StatusCode != http.StatusAccepted {
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
 		errChannel <- fmt.Errorf("unexpected status: %d", response.StatusCode)
 		return
-	}
-	if response.StatusCode == http.StatusAccepted {
+	} else {
 		errChannel <- nil
 		return
 	}
-	defer response.Body.Close()
-	errChannel <- nil
 }
