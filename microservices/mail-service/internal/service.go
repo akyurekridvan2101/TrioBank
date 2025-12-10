@@ -18,7 +18,7 @@ func SendMail(ctx context.Context, r Receiver) error {
 `
 
 	req := &resend.SendEmailRequest{
-		From:    "Trio Bank <onboarding@triobank.com>",
+		From:    "Trio Bank <onboarding@triobank.org>",
 		To:      []string{r.Receiver},
 		Subject: "Doğrulama Kodunuz",
 		Html:    body,
