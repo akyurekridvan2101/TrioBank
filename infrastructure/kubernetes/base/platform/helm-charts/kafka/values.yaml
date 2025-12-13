@@ -1,0 +1,51 @@
+
+enabled: true
+
+commonAnnotations:
+  argocd.argoproj.io/sync-wave: "400"
+
+cluster:
+  name: kafka
+  namespace: triobank
+
+nodePool:
+  name: triobank-pool
+  replicas: 1  # Prod'da 3+
+  
+  roles:
+    - controller  # Metadata yönetimi
+    - broker      # Message handling
+  
+  storage:
+    type: persistent-claim  # Kalıcı disk
+    size: 5Gi              # Base size (local'de 2Gi override)
+    deleteClaim: true      # Pod silinince PVC de silinsin
+
+kafka:
+  version: "4.0.1"
+  metadataVersion: "4.0-IV0"  # KRaft metadata version
+
+  listeners:
+    - name: plain
+      port: 9092
+      type: internal
+      tls: false         # Plain text (local dev)
+    
+    - name: tls
+      port: 9093
+      type: internal
+      tls: true          # TLS encrypted
+
+  config:
+    offsets.topic.replication.factor: 1
+    transaction.state.log.replication.factor: 1
+    transaction.state.log.min.isr: 1
+    default.replication.factor: 1
+    min.insync.replicas: 1
+    auto.create.topics.enable: true  # Topic'ler otomatik oluşsun
+
+entityOperator:
+  topicOperator:
+    enabled: true   # KafkaTopic CRD'leri yönetir
+  userOperator:
+    enabled: true   # KafkaUser CRD'leri yönetir

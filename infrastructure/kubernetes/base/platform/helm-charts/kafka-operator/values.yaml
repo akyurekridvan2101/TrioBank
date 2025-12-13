@@ -1,0 +1,32 @@
+
+strimzi-kafka-operator:
+  replicas: 1
+  
+  watchAnyNamespace: true
+
+  commonAnnotations:
+    argocd.argoproj.io/sync-wave: "300"
+
+  resources:
+    requests:
+      memory: 1024Mi
+      cpu: 200m
+    limits:
+      memory: 2048Mi
+      cpu: 1000m
+
+  extraEnvs:
+    - name: JAVA_TOOL_OPTIONS
+      value: "-Dvertx.blockedThreadCheckInterval=300000"
+
+  livenessProbe:
+    initialDelaySeconds: 120
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  readinessProbe:
+    initialDelaySeconds: 120
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3

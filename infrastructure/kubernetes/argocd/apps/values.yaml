@@ -1,0 +1,6 @@
+
+env: dev
+
+branch: main
+
+repoURL: https://github.com/akyurekridvan2101/TrioBank.git

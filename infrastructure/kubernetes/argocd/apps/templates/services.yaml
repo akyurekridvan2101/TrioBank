@@ -1,0 +1,50 @@
+
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: services
+  namespace: argocd
+spec:
+  generators:
+    - git:
+        repoURL: {{ .Values.repoURL }}
+        revision: {{ .Values.branch }}
+        directories:
+          - path: 'services/*/k8s'
+
+  template:
+    metadata:
+      name: '{{`{{path[1]}}`}}'
+      namespace: argocd
+      annotations:
+        argocd.argoproj.io/sync-wave: "1000"
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: default
+
+      source:
+        repoURL: {{ .Values.repoURL }}
+        targetRevision: {{ .Values.branch }}
+        path: '{{`{{path}}`}}'
+        helm:
+          valueFiles:
+            - values.yaml                      # Base
+            - overlays/{{ .Values.env }}/values.yaml      # Local veya Production
+
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: triobank
+
+      syncPolicy:
+        automated:
+          prune: true      # Silinen kaynakları temizle
+          selfHeal: true   # El ile değişiklik yapılırsa geri al
+        syncOptions:
+          - CreateNamespace=true
+        retry:
+          limit: 5
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m

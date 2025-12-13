@@ -1,0 +1,17 @@
+
+vault:
+  enabled: true
+  
+  commonAnnotations:
+    argocd.argoproj.io/sync-wave: "200"
+  
+  externalHost: ""  # Overlay'de set et
+  
+  service:
+    name: vault
+    port: 8200
+
+
+
+
+

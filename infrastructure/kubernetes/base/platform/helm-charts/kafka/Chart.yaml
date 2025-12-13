@@ -1,0 +1,7 @@
+
+apiVersion: v2
+name: kafka
+description: Strimzi Kafka Cluster - Kafka, NodePool ve KafkaConnect CRD'leri
+type: application
+version: 0.1.0
+appVersion: "4.0.1"

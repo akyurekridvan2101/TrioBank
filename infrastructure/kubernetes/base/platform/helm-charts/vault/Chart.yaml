@@ -1,0 +1,7 @@
+
+apiVersion: v2
+name: vault
+description: Vault Connection Service (ExternalName)
+type: application
+version: 0.1.0
+appVersion: "1.15.0"

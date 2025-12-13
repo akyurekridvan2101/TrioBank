@@ -1,0 +1,89 @@
+
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: platform
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - app: external-secrets
+            path: infrastructure/kubernetes/base/platform/helm-charts/external-secrets
+            wave: "100"
+
+          - app: vault
+            path: infrastructure/kubernetes/base/platform/helm-charts/vault
+            wave: "200"
+
+          - app: kafka-operator
+            path: infrastructure/kubernetes/base/platform/helm-charts/kafka-operator
+            wave: "300"
+
+          - app: kafka
+            path: infrastructure/kubernetes/base/platform/helm-charts/kafka
+            wave: "400"
+
+          - app: connect
+            path: infrastructure/kubernetes/base/platform/helm-charts/connect
+            wave: "500"
+
+          - app: kafka-ui
+            path: infrastructure/kubernetes/base/platform/helm-charts/kafka-ui
+            wave: "600"
+
+  template:
+    metadata:
+      name: '{{`{{app}}`}}'
+      namespace: argocd
+      annotations:
+        argocd.argoproj.io/sync-wave: '{{`{{wave}}`}}'
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: default
+
+      source:
+        repoURL: {{ .Values.repoURL }}
+        targetRevision: {{ .Values.branch }}
+        path: '{{`{{path}}`}}'
+        helm:
+          valueFiles:
+            - values.yaml
+            - ../../../../overlays/{{ .Values.env }}/values/{{`{{app}}`}}.yaml
+
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: triobank
+
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+        retry:
+          limit: 5
+          backoff:
+            duration: 5s
+            factor: 2
+            maxDuration: 3m
+
+      ignoreDifferences:
+        - group: kafka.strimzi.io
+          kind: KafkaConnector
+          jsonPointers:
+            - /spec/config/config.providers
+            - /spec/config/config.storage.replication.factor
+            - /spec/config/config.storage.topic
+        - group: external-secrets.io
+          kind: ExternalSecret
+          jsonPointers:
+            - /spec/dataFrom
+            - /spec/data/0/remoteRef/conversionStrategy
+            - /spec/data/0/remoteRef/decodingStrategy
+            - /spec/data/0/remoteRef/metadataPolicy
+            - /spec/data/1/remoteRef/conversionStrategy
+            - /spec/data/1/remoteRef/decodingStrategy
+            - /spec/data/1/remoteRef/metadataPolicy
