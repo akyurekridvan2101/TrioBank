@@ -11,4 +11,6 @@ var (
 	ErrTokenIsNotExist  = errors.New("the token is not found")
 	ErrTokenIsNotActive = errors.New("the token is not active")
 	ErrTokenExpired     = errors.New("the token expired")
+
+	ErrOldPasswordInvalid = errors.New("old password not right")
 )

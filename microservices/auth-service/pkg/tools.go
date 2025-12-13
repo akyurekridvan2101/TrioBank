@@ -10,6 +10,10 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+func GenerateUUID() string {
+	return uuid.New().String()
+}
+
 func HashPassword(password string) (string, error) {
 	temp, err := bcrypt.GenerateFromPassword([]byte(password), 10)
 	if err != nil {

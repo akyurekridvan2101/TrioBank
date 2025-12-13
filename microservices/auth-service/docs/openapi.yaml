@@ -94,11 +94,19 @@ components:
 
     PasswordChangeRequest:
       type: object
-      required: [yenipassword]
+      required: [old_password, new_password]
       properties:
-        yenipassword:
+        old_password:
           type: string
-          example: "Yenipassword123!"
+          description: Mevcut şifre
+          example: "OldPassword123!"
+        new_password:
+          type: string
+          description: |-
+            Yeni şifre (min 8 karakter, en az 1 büyük harf, 1 küçük harf, 1 rakam içermeli)
+          minLength: 8
+          pattern: "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).{8,}$"
+          example: "NewPassword123!"
 
 paths:
 
@@ -519,25 +527,32 @@ paths:
     post:
       tags: [Account Settings]
       summary: Şifre Değiştirme
-      description: |
+      description: |-
         Kullanıcının şifresi güncellenir.
         
         **Akış:**
-        1. Authorization header'dan access token okunur
+        1. Authorization header'dan Bearer token okunur ve format kontrol edilir
         2. Token doğrulanır ve user UUID çıkarılır
-        3. Eski şifre doğrulanır (güvenlik için)
-        4. Yeni şifre hash'lenir
-        5. MongoDB'de şifre güncellenir
+        3. Request body'den old_password ve new_password alınır
+        4. Boş string kontrolü yapılır
+        5. Yeni ve eski şifrenin aynı olmadığı kontrol edilir
+        6. UUID ile kullanıcı bulunur ve eski şifre doğrulanır
+        7. Yeni şifre hash'lenir (bcrypt)
+        8. MongoDB'de şifre güncellenir
         
         **Güvenlik:**
-        - Eski şifre gerekli (unauthorized değişikliği önler)
-        - Yeni şifre güçlü olmalı (min 8 char, büyük/küçük harf, rakam)
+        - Bearer token format kontrolü (401 döner)
+        - Eski şifre doğrulaması zorunlu (unauthorized değişikliği önler)
+        - Yeni şifre eski şifreden farklı olmalı
+        - Bcrypt ile şifre karşılaştırma (timing attack koruması)
+        
+        **Not:** Yeni şifre için otomatik güçlülük kontrolü yapılmaz. Uygulama katmanında kontrol önerilir.
         
       parameters:
         - name: Authorization
           in: header
           required: true
-          description: Bearer token formatında access token
+          description: Bearer token formatında access token (format kontrolü yapılır)
           schema:
             type: string
             example: "Bearer eyJhbGciOiJIUzI1NiIs..."
@@ -546,17 +561,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required: [old_password, new_password]
-              properties:
-                old_password:
-                  type: string
-                  description: Mevcut şifre
-                  example: "OldPassword123!"
-                new_password:
-                  type: string
-                  description: Yeni şifre (min 8 char)
-                  example: "NewPassword456!"
+              $ref: '#/components/schemas/PasswordChangeRequest'
       responses:
         '200':
           description: Şifre başarıyla güncellendi.
@@ -566,31 +571,37 @@ paths:
                 type: string
                 example: "password updated successfully"
         '400':
-          description: Request body hatalı veya şifre formatı geçersiz.
+          description: Request body hatalı, şifreler boş veya aynı, ya da Authorization header eksik.
           content:
             text/plain:
               schema:
                 type: string
               examples:
                 bodyError:
-                  summary: Request body hatası
-                  value: "old_password and new_password required"
-                weakPassword:
-                  summary: Zayıf şifre
-                  value: "password must be at least 8 characters"
+                  summary: Request body decode hatası
+                  value: "old password and new password required"
+                emptyFields:
+                  summary: Boş şifre alanları
+                  value: "the struct of passwords are invalid"
+                samePassword:
+                  summary: Yeni şifre eski ile aynı
+                  value: "the new and old passwords are same"
+                oldPasswordInvalid:
+                  summary: Eski şifre yanlış
+                  value: "old password invalid"
         '401':
-          description: Token geçersiz veya eski şifre yanlış.
+          description: Authorization header Bearer formatında değil veya token geçersiz.
           content:
             text/plain:
               schema:
                 type: string
               examples:
-                invalidToken:
-                  summary: Token geçersiz
+                invalidFormat:
+                  summary: Bearer prefix yok
                   value: "invalid access token"
-                wrongPassword:
-                  summary: Eski şifre yanlış
-                  value: "old password is incorrect"
+                invalidToken:
+                  summary: Token geçersiz veya expire olmuş
+                  value: "invalid access token"
         '405':
           description: Yalnızca POST metodu kabul edilir.
           content:
@@ -598,12 +609,11 @@ paths:
               schema:
                 type: string
         '500':
-          description: Sunucu hatası.
+          description: Sunucu hatası (hash veya database güncelleme hatası).
           content:
             text/plain:
               schema:
                 type: string
-                example: "failed to update password"
 
   /auth/delete-account:
     delete:

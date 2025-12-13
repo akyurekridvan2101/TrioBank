@@ -226,6 +226,7 @@ func (repo Repo) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user.Id = primitive.NewObjectID()
+	user.UUID = pkg.GenerateUUID()
 	user.Name = data.Name
 	user.Surname = data.Surname
 	user.Email = data.Email
@@ -546,8 +547,78 @@ func (repo Repo) TokenValidation(w http.ResponseWriter, r *http.Request) {
 }
 
 func (repo Repo) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	token := r.Header.Get("Authorization")
+	if token == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+	defer cancel()
+
+	if !strings.HasPrefix(token, "Bearer ") {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte("invalid access token"))
+		return
+	}
+
+	AccessToken := strings.TrimPrefix(token, "Bearer ")
+
+	userUuid, err := pkg.ValidateAccessToken(AccessToken)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte("invalid access token"))
+		return
+	}
+	requestData := struct {
+		OldPassword string `json:"old_password"`
+		NewPassword string `json:"new_password"`
+	}{}
+	err = json.NewDecoder(r.Body).Decode(&requestData)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte("old password and new password required"))
+		return
+	}
+	if requestData.NewPassword == "" || requestData.OldPassword == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte("the struct of passwords are invalid"))
+		return
+	}
+	if requestData.NewPassword == requestData.OldPassword {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte("the new and old passwords are same"))
+		return
+	}
+
+	userId, err := repo.DataBase.validateUserPassword(ctx, userUuid, requestData.OldPassword)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte("old password invalid"))
+		return
+	}
+	NewHashedPassword, err := pkg.HashPassword(requestData.NewPassword)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	err = repo.DataBase.updatePassword(ctx, userId, NewHashedPassword)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("password updated successfully"))
 
 }
+
 func (repo Repo) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 
 }

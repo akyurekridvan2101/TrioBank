@@ -85,7 +85,7 @@ func (db MongoDB) createAccessToken(ctx context.Context, refreshToken string) (s
 }
 func (db MongoDB) inActiveRefreshToken(ctx context.Context, refreshToken string) error {
 	collection := db.Db.Collection("Tokens")
-	_, err := collection.UpdateOne(ctx, bson.M{"_id": refreshToken, "active": true}, bson.M{"$set": bson.M{"active": false}})
+	_, err := collection.UpdateOne(ctx, bson.M{"token": refreshToken, "active": true}, bson.M{"$set": bson.M{"active": false}})
 	return err
 }
 
@@ -129,6 +129,24 @@ func (db MongoDB) createUser(ctx context.Context, user User) error {
 		return err
 	}
 	return nil
+}
+func (db MongoDB) validateUserPassword(ctx context.Context, userUuid, password string) (primitive.ObjectID, error) {
+	collection := db.Db.Collection("Users")
+	var user User
+	err := collection.FindOne(ctx, bson.M{"uuid": userUuid}).Decode(&user)
+	if err != nil {
+		return primitive.NilObjectID, err
+	}
+
+	if err := pkg.HashedPasswordControl(password, user.HashedPassword); err != nil {
+		return primitive.NilObjectID, ErrOldPasswordInvalid
+	}
+	return user.Id, nil
+}
+func (db MongoDB) updatePassword(ctx context.Context, userId primitive.ObjectID, newPassword string) error {
+	collection := db.Db.Collection("Users")
+	_, err := collection.UpdateOne(ctx, bson.M{"_id": userId}, bson.M{"$set": bson.M{"hashedPassword": newPassword}})
+	return err
 }
 
 func (db MongoDB) deleteUser(ctx context.Context, userId primitive.ObjectID) error {

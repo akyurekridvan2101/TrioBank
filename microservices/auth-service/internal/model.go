@@ -62,6 +62,8 @@ type DataBaseI interface {
 	createUser(ctx context.Context, user User) error
 	deleteUser(ctx context.Context, userId primitive.ObjectID) error
 	getUserById(ctx context.Context, userId primitive.ObjectID) (User, error)
+	validateUserPassword(ctx context.Context, userUuid, password string) (primitive.ObjectID, error)
+	updatePassword(ctx context.Context, userId primitive.ObjectID, newPassword string) error
 }
 
 type SessionManagerI interface {
