@@ -53,6 +53,9 @@ type DataBaseI interface {
 	isUserExist(ctx context.Context, tc string) error
 
 	createRefreshAndAccessToken(ctx context.Context, id primitive.ObjectID) (string, string, error)
+	createAccessToken(ctx context.Context, refreshToken string) (string, error)
+	inActiveRefreshToken(ctx context.Context, refreshToken string) error
+	isRefreshTokenExistAndActive(ctx context.Context, refreshToken string) (primitive.ObjectID, error)
 
 	createUser(ctx context.Context, user User) error
 	deleteUser(ctx context.Context, userId primitive.ObjectID) error

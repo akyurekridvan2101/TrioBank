@@ -414,3 +414,78 @@ func (repo Repo) RegisterConfirm(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(ret)
 
 }
+
+func (repo Repo) Logout(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "Refresh-Token",
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   true,
+	})
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "Access-Token",
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   true,
+	})
+
+	if c, err := r.Cookie("Refresh-Token"); err == nil {
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+		defer cancel()
+
+		err = repo.DataBase.inActiveRefreshToken(ctx, c.Value)
+		fmt.Println(err)
+	} else {
+		fmt.Println(err)
+	}
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("logged out successfully"))
+}
+
+func (repo Repo) RefreshAccessToken(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+	defer cancel()
+	c, err := r.Cookie("Refresh-Token")
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte("the refresh code could not be found"))
+		return
+	}
+
+	accessToken, err := repo.DataBase.createAccessToken(ctx, c.Value)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte("the refresh code is not valid"))
+		return
+	}
+	res, err := json.Marshal(struct {
+		AccessToken string `json:"access_token"`
+	}{AccessToken: accessToken})
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("something went wrong while converting access token into json"))
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(res)
+}

@@ -324,38 +324,113 @@ paths:
     post:
       tags: [Token Operations]
       summary: Çıkış Yap
-      security:
-        - bearerAuth: []
       description: |
-        Kullanıcı çıkış yaptığında refresh token DB’den silinir.
+        Kullanıcı çıkış yapar ve token'ları temizlenir.
+        
+        **Akış:**
+        1. Refresh-Token ve Access-Token cookie'leri MaxAge=-1 ile sıfırlanır (tarayıcıdan silinir)
+        2. Eğer Refresh-Token cookie'si mevcutsa, token MongoDB'den de silinir
+        3. Cookie mevcut olmasa bile işlem başarılı döner (idempotent)
+        
+        **Not:** Bu endpoint authentication gerektirmez. Herhangi bir kullanıcı çağırabilir.
+        Zaten giriş yapmamış bir kullanıcı çağırırsa sadece cookie'ler temizlenir, hata dönmez.
       responses:
         '200':
-          description: Çıkış başarılı.
+          description: Çıkış başarılı, cookie'ler temizlendi.
+          headers:
+            Set-Cookie:
+              description: |
+                İki cookie silinir (MaxAge=-1 ile expire edilir):
+                - Refresh-Token=; HttpOnly; Secure; Path=/; Max-Age=-1
+                - Access-Token=; HttpOnly; Secure; Path=/; Max-Age=-1
+              schema:
+                type: string
           content:
-            application/json:
-              schema: { $ref: '#/components/schemas/EmptyObject' }
-        '401': { description: Geçersiz access token. }
-        '500': { description: Sunucu hatası. }
+            text/plain:
+              schema:
+                type: string
+                example: "logged out successfully"
+        '405':
+          description: Yalnızca POST metodu kabul edilir.
+          content:
+            text/plain:
+              schema:
+                type: string
 
   /auth/refresh:
     post:
       tags: [Token Operations]
       summary: Access Token Yenileme
       description: |
-        Refresh token doğrulanır ve yeni access token üretilir.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/RefreshRequest' }
+        HttpOnly cookie'deki refresh token doğrulanır ve yeni access token üretilir.
+        
+        **Akış:**
+        1. Request'teki `Refresh-Token` HttpOnly cookie'si okunur
+        2. Token MongoDB'de aranır ve doğrulanır:
+           - Token mevcut mu?
+           - Token aktif mi (isActive: true)?
+           - Token expire olmamış mı (expiredAt > now)?
+        3. Doğrulama başarılıysa yeni access token üretilir
+        4. (Opsiyonel) Token rotation: Yeni refresh token da üretilebilir
+        
+        **Güvenlik:**
+        - Refresh token HttpOnly cookie olarak gelir (XSS koruması)
+        - Request body gerekmez
+        - CSRF koruması için SameSite=Strict önerilir
+        
+        **Not:** Cookie yoksa veya expire olmuşsa 401 döner.
+      parameters:
+        - name: Refresh-Token
+          in: cookie
+          required: true
+          description: HttpOnly refresh token cookie (login veya register sonrası set edilir)
+          schema:
+            type: string
       responses:
         '200':
           description: Yeni access token üretildi.
+          headers:
+            Set-Cookie:
+              description: |
+                Token rotation aktifse yeni refresh token cookie'si set edilir.
+                Örnek: Refresh-Token=<new-token>; HttpOnly; Secure; Path=/; Max-Age=604800
+              schema:
+                type: string
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/RefreshResponse' }
-        '401': { description: Refresh token geçersiz. }
-        '500': { description: Sunucu hatası. }
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                    description: Yeni JWT access token
+                    example: "eyJhbGciOiJIUzI1NiIs..."
+        '401':
+          description: Refresh token geçersiz veya bulunamadı.
+          content:
+            text/plain:
+              schema:
+                type: string
+              examples:
+                noCookie:
+                  summary: Cookie bulunamadı
+                  value: "the refresh code could not be found"
+                invalidToken:
+                  summary: Token geçersiz veya expire olmuş
+                  value: "the refresh code is not valid"
+        '405':
+          description: Yalnızca POST metodu kabul edilir.
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Sunucu hatası.
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "something went wrong while converting access token into json"
 
   /auth/validation:
     post:
