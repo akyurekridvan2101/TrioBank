@@ -18,6 +18,10 @@ func StartRouter(r Repo) {
 
 	http.HandleFunc("/auth/logout", middleware(r.Logout))
 	http.HandleFunc("/auth/refresh", middleware(r.RefreshAccessToken))
+	http.HandleFunc("/auth/validation", middleware(r.TokenValidation))
+
+	http.HandleFunc("/auth/validation", middleware(r.ChangePassword))
+	http.HandleFunc("/auth/validation", middleware(r.DeleteAccount))
 
 	err := http.ListenAndServe(config.GetEnv("AUTH_SERVICE_PORT"), nil)
 	if err != nil {

@@ -9,6 +9,7 @@ import (
 
 type User struct {
 	Id             primitive.ObjectID `bson:"_id, omitempty" json:"id"`
+	UUID           string             `bson:"uuid" json:"uuid"`
 	Name           string             `bson:"name" json:"name"`
 	Surname        string             `bson:"surname" json:"surname"`
 	HashedPassword string             `bson:"hashedPassword" json:"hashedPassword"`
@@ -22,6 +23,7 @@ type User struct {
 type Tokens struct {
 	Id        primitive.ObjectID `bson:"_id, omitempty" json:"id"`
 	UserId    primitive.ObjectID `bson:"user_id" json:"userId"`
+	UserUUID  string             `bson:"user_uuid" json:"userUuid"`
 	Token     string             `bson:"token" json:"token"`
 	CreatedAt time.Time          `bson:"createdAt" json:"createdAt"`
 	ExpiredAt time.Time          `bson:"expiredAt" json:"expiredAt"`
@@ -52,13 +54,14 @@ type DataBaseI interface {
 	loginControl(ctx context.Context, data loginData) (User, error)
 	isUserExist(ctx context.Context, tc string) error
 
-	createRefreshAndAccessToken(ctx context.Context, id primitive.ObjectID) (string, string, error)
+	createRefreshAndAccessToken(ctx context.Context, id primitive.ObjectID, userUUID string) (string, string, error)
 	createAccessToken(ctx context.Context, refreshToken string) (string, error)
 	inActiveRefreshToken(ctx context.Context, refreshToken string) error
-	isRefreshTokenExistAndActive(ctx context.Context, refreshToken string) (primitive.ObjectID, error)
+	isRefreshTokenExistAndActive(ctx context.Context, refreshToken string) (string, error)
 
 	createUser(ctx context.Context, user User) error
 	deleteUser(ctx context.Context, userId primitive.ObjectID) error
+	getUserById(ctx context.Context, userId primitive.ObjectID) (User, error)
 }
 
 type SessionManagerI interface {

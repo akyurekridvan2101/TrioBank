@@ -7,10 +7,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-
 	"math/big"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/TrioBank/triobank-platform/microservices/auth-service/pkg"
@@ -154,8 +154,15 @@ func (repo Repo) LoginConfirm(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("something went wrong in server"))
 		return
 	}
+	// Get user from DB to get UUID
+	user, err := repo.DataBase.getUserById(ctx, userId)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("could not find user"))
+		return
+	}
 	// access and refresh token will be created and stored
-	refreshToken, accessToken, err := repo.DataBase.createRefreshAndAccessToken(ctx, userId)
+	refreshToken, accessToken, err := repo.DataBase.createRefreshAndAccessToken(ctx, userId, user.UUID)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte("something went wrong in creating refresh and access token"))
@@ -364,7 +371,7 @@ func (repo Repo) RegisterConfirm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	refreshToken, accessToken, err := repo.DataBase.createRefreshAndAccessToken(ctx, user.Id)
+	refreshToken, accessToken, err := repo.DataBase.createRefreshAndAccessToken(ctx, user.Id, user.UUID)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte("something went wrong while creating tokens"))
@@ -488,4 +495,59 @@ func (repo Repo) RefreshAccessToken(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(res)
+}
+
+func (repo Repo) TokenValidation(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	authorizationHeader := r.Header.Get("Authorization")
+	if authorizationHeader == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte("authorization header is required"))
+		return
+	}
+
+	if !strings.HasPrefix(authorizationHeader, "Bearer ") {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte("invalid authorization header format"))
+		return
+	}
+	accessToken := strings.TrimPrefix(authorizationHeader, "Bearer ")
+
+	userUUID, err := pkg.ValidateAccessToken(accessToken)
+	if err != nil {
+		if errors.Is(err, pkg.ErrTokenExpired) {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte("token has expired"))
+			return
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte("invalid access token"))
+		return
+	}
+	res, err := json.Marshal(struct {
+		UserId string `json:"user_id"`
+	}{
+		UserId: userUUID,
+	})
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("internal server error"))
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(res)
+}
+
+func (repo Repo) ChangePassword(w http.ResponseWriter, r *http.Request) {
+
+}
+func (repo Repo) DeleteAccount(w http.ResponseWriter, r *http.Request) {
+
 }

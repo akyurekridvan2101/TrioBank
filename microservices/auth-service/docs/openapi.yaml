@@ -435,34 +435,255 @@ paths:
   /auth/validation:
     post:
       tags: [Token Operations]
-      summary: Access Token Doğrulama
+      summary: Access Token Doğrulama (API Gateway için)
       description: |
-        API Gateway tarafından kullanılır. Token geçerliyse 200 döner.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/ValidationRequest' }
+        API Gateway her korumalı endpoint'e gelen istekte bu endpoint'i çağırır.
+        Token geçerliyse 200, geçersizse 401 döner.
+        
+        **Kullanım Senaryosu:**
+        1. Client → API Gateway'e istek yapar (Authorization: Bearer <token>)
+        2. API Gateway → /auth/validation çağırır
+        3. Token geçerliyse → 200 döner, Gateway isteği backend'e yönlendirir
+        4. Token geçersizse → 401 döner, Gateway client'a 401 döner
+        
+        **Doğrulama Adımları:**
+        1. JWT imza doğrulaması (secret key ile)
+        2. Token expire kontrolü (exp claim)
+        3. Issuer kontrolü (iss = "auth-service")
+        
+        **Not:** Bu endpoint sadece internal kullanım içindir.
+      parameters:
+        - name: Authorization
+          in: header
+          required: true
+          description: Bearer token formatında access token
+          schema:
+            type: string
+            example: "Bearer eyJhbGciOiJIUzI1NiIs..."
       responses:
-        '200': { description: Token geçerli. }
-        '401': { description: Token geçersiz. }
-        '500': { description: Sunucu hatası. }
+        '200':
+          description: Token geçerli, kullanıcı ID'si döner.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user_id:
+                    type: string
+                    description: Kullanıcı ID (MongoDB ObjectID veya UUID formatında)
+                    example: "507f1f77bcf86cd799439011"
+        '400':
+          description: Authorization header eksik veya formatı yanlış.
+          content:
+            text/plain:
+              schema:
+                type: string
+              examples:
+                missingHeader:
+                  summary: Header eksik
+                  value: "authorization header is required"
+                invalidFormat:
+                  summary: Format hatalı
+                  value: "invalid authorization header format"
+        '401':
+          description: Token geçersiz, expire olmuş veya imza doğrulanamadı.
+          content:
+            text/plain:
+              schema:
+                type: string
+              examples:
+                invalidToken:
+                  summary: Token geçersiz
+                  value: "invalid access token"
+                expiredToken:
+                  summary: Token süresi dolmuş
+                  value: "token has expired"
+                invalidSignature:
+                  summary: İmza doğrulanamadı
+                  value: "invalid token signature"
+        '405':
+          description: Yalnızca POST metodu kabul edilir.
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Sunucu hatası.
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "internal server error"
 
   /auth/password-change:
     post:
       tags: [Account Settings]
       summary: Şifre Değiştirme
-      security:
-        - bearerAuth: []
       description: |
         Kullanıcının şifresi güncellenir.
+        
+        **Akış:**
+        1. Authorization header'dan access token okunur
+        2. Token doğrulanır ve user UUID çıkarılır
+        3. Eski şifre doğrulanır (güvenlik için)
+        4. Yeni şifre hash'lenir
+        5. MongoDB'de şifre güncellenir
+        
+        **Güvenlik:**
+        - Eski şifre gerekli (unauthorized değişikliği önler)
+        - Yeni şifre güçlü olmalı (min 8 char, büyük/küçük harf, rakam)
+        
+      parameters:
+        - name: Authorization
+          in: header
+          required: true
+          description: Bearer token formatında access token
+          schema:
+            type: string
+            example: "Bearer eyJhbGciOiJIUzI1NiIs..."
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/PasswordChangeRequest' }
+            schema:
+              type: object
+              required: [old_password, new_password]
+              properties:
+                old_password:
+                  type: string
+                  description: Mevcut şifre
+                  example: "OldPassword123!"
+                new_password:
+                  type: string
+                  description: Yeni şifre (min 8 char)
+                  example: "NewPassword456!"
       responses:
-        '200': { description: Şifre güncellendi. }
-        '400': { description: Yeni şifre formatı geçersiz. }
-        '401': { description: Token geçersiz. }
-        '500': { description: Sunucu hatası. }
+        '200':
+          description: Şifre başarıyla güncellendi.
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "password updated successfully"
+        '400':
+          description: Request body hatalı veya şifre formatı geçersiz.
+          content:
+            text/plain:
+              schema:
+                type: string
+              examples:
+                bodyError:
+                  summary: Request body hatası
+                  value: "old_password and new_password required"
+                weakPassword:
+                  summary: Zayıf şifre
+                  value: "password must be at least 8 characters"
+        '401':
+          description: Token geçersiz veya eski şifre yanlış.
+          content:
+            text/plain:
+              schema:
+                type: string
+              examples:
+                invalidToken:
+                  summary: Token geçersiz
+                  value: "invalid access token"
+                wrongPassword:
+                  summary: Eski şifre yanlış
+                  value: "old password is incorrect"
+        '405':
+          description: Yalnızca POST metodu kabul edilir.
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Sunucu hatası.
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "failed to update password"
+
+  /auth/delete-account:
+    delete:
+      tags: [Account Settings]
+      summary: Hesap Silme
+      description: |
+        Kullanıcı hesabını kalıcı olarak siler.
+        
+        **Akış:**
+        1. Authorization header'dan access token okunur
+        2. Token doğrulanır ve user UUID/ID çıkarılır
+        3. Şifre doğrulanır (güvenlik için)
+        4. Kullanıcı MongoDB'den silinir
+        5. İlişkili tüm tokenlar deaktif edilir
+        
+        **Uyarı:** Bu işlem GERİ ALINAMAZ!
+        
+        **Güvenlik:**
+        - Şifre onayı gerekli
+        - Sadece kendi hesabını silebilir (token doğrulama)
+        
+      parameters:
+        - name: Authorization
+          in: header
+          required: true
+          description: Bearer token formatında access token
+          schema:
+            type: string
+            example: "Bearer eyJhbGciOiJIUzI1NiIs..."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password:
+                  type: string
+                  description: Hesap şifresi (onay için)
+                  example: "MyPassword123!"
+      responses:
+        '200':
+          description: Hesap başarıyla silindi.
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "account deleted successfully"
+        '400':
+          description: Request body hatalı.
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "password is required"
+        '401':
+          description: Token geçersiz veya şifre yanlış.
+          content:
+            text/plain:
+              schema:
+                type: string
+              examples:
+                invalidToken:
+                  summary: Token geçersiz
+                  value: "invalid access token"
+                wrongPassword:
+                  summary: Şifre yanlış
+                  value: "incorrect password"
+        '405':
+          description: Yalnızca DELETE metodu kabul edilir.
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Sunucu hatası.
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "failed to delete account"
+

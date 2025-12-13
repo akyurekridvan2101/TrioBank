@@ -40,7 +40,7 @@ func (db MongoDB) loginControl(ctx context.Context, data loginData) (User, error
 	}
 }
 
-func (db MongoDB) createRefreshAndAccessToken(ctx context.Context, userId primitive.ObjectID) (string, string, error) {
+func (db MongoDB) createRefreshAndAccessToken(ctx context.Context, userId primitive.ObjectID, userUUID string) (string, string, error) {
 	collection := db.Db.Collection("Tokens")
 	_, err := collection.UpdateMany(ctx, bson.M{"user_id": userId}, bson.M{"$set": bson.M{"isActive": false}})
 	if err != nil {
@@ -50,17 +50,18 @@ func (db MongoDB) createRefreshAndAccessToken(ctx context.Context, userId primit
 	var refresh Tokens
 	refresh.Id = primitive.NewObjectID()
 	refresh.UserId = userId
+	refresh.UserUUID = userUUID
 	refresh.IsActive = true
 	refresh.CreatedAt = time.Now()
 	refresh.ExpiredAt = time.Now().Add(time.Hour * 7 * 24)
 
-	refreshToken, err := pkg.CreateRefreshToken(userId)
+	refreshToken, err := pkg.CreateRefreshToken(userUUID)
 	if err != nil {
 		return "", "", err
 	}
 	refresh.Token = refreshToken
 
-	accessToken, err := pkg.CreateAccessToken(userId)
+	accessToken, err := pkg.CreateAccessToken(userUUID)
 	if err != nil {
 		return "", "", err
 	}
@@ -72,11 +73,11 @@ func (db MongoDB) createRefreshAndAccessToken(ctx context.Context, userId primit
 	return refreshToken, accessToken, nil
 }
 func (db MongoDB) createAccessToken(ctx context.Context, refreshToken string) (string, error) {
-	userId, err := db.isRefreshTokenExistAndActive(ctx, refreshToken)
+	userUUID, err := db.isRefreshTokenExistAndActive(ctx, refreshToken)
 	if err != nil {
 		return "", err
 	}
-	accessToken, err := pkg.CreateAccessToken(userId)
+	accessToken, err := pkg.CreateAccessToken(userUUID)
 	if err != nil {
 		return "", err
 	}
@@ -88,25 +89,25 @@ func (db MongoDB) inActiveRefreshToken(ctx context.Context, refreshToken string)
 	return err
 }
 
-func (db MongoDB) isRefreshTokenExistAndActive(ctx context.Context, refreshToken string) (primitive.ObjectID, error) {
+func (db MongoDB) isRefreshTokenExistAndActive(ctx context.Context, refreshToken string) (string, error) {
 	collection := db.Db.Collection("Tokens")
 	var tempToken Tokens
-	result := collection.FindOne(ctx, bson.M{"_id": refreshToken})
+	result := collection.FindOne(ctx, bson.M{"token": refreshToken})
 	if errors.Is(result.Err(), mongo.ErrNoDocuments) {
-		return primitive.ObjectID{}, ErrTokenIsNotExist
+		return "", ErrTokenIsNotExist
 	}
-	err := result.Decode(tempToken)
+	err := result.Decode(&tempToken)
 	if err != nil {
-		return primitive.ObjectID{}, err
+		return "", err
 	}
 	if tempToken.IsActive != true {
-		return primitive.ObjectID{}, ErrTokenIsNotActive
+		return "", ErrTokenIsNotActive
 	}
 	if !tempToken.ExpiredAt.After(time.Now()) {
 		_ = db.inActiveRefreshToken(ctx, refreshToken)
-		return primitive.ObjectID{}, ErrTokenExpired
+		return "", ErrTokenExpired
 	}
-	return tempToken.UserId, nil
+	return tempToken.UserUUID, nil
 }
 
 func (db MongoDB) isUserExist(ctx context.Context, tc string) error {
@@ -140,6 +141,20 @@ func (db MongoDB) deleteUser(ctx context.Context, userId primitive.ObjectID) err
 		return fmt.Errorf("user not found with id: %s", userId.String())
 	}
 	return nil
+}
+
+func (db MongoDB) getUserById(ctx context.Context, userId primitive.ObjectID) (User, error) {
+	collection := db.Db.Collection("Users")
+	var user User
+	result := collection.FindOne(ctx, bson.M{"_id": userId})
+	if result.Err() != nil {
+		return User{}, result.Err()
+	}
+	err := result.Decode(&user)
+	if err != nil {
+		return User{}, err
+	}
+	return user, nil
 }
 
 func (db RedisDB) saveSessionId(ctx context.Context, userId primitive.ObjectID, sessionId string, code int64) error {

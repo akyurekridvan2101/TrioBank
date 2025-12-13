@@ -1,11 +1,12 @@
 package pkg
 
 import (
+	"errors"
 	"time"
 
 	"github.com/TrioBank/triobank-platform/microservices/auth-service/config"
 	"github.com/golang-jwt/jwt/v5"
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -26,10 +27,10 @@ func HashedPasswordControl(password string, hashedPassword string) error {
 	}
 }
 
-func CreateRefreshToken(userId primitive.ObjectID) (string, error) {
+func CreateRefreshToken(userUUID string) (string, error) {
 	claims := jwt.RegisteredClaims{
 		Issuer:    "auth-service",
-		Subject:   userId.String(),
+		Subject:   userUUID,
 		ExpiresAt: &jwt.NumericDate{time.Now().Add(time.Hour * 7 * 24)},
 	}
 
@@ -41,10 +42,10 @@ func CreateRefreshToken(userId primitive.ObjectID) (string, error) {
 	return tokenString, nil
 }
 
-func CreateAccessToken(userId primitive.ObjectID) (string, error) {
+func CreateAccessToken(userUUID string) (string, error) {
 	claims := jwt.RegisteredClaims{
 		Issuer:    "auth-service",
-		Subject:   userId.String(),
+		Subject:   userUUID,
 		ExpiresAt: &jwt.NumericDate{time.Now().Add(time.Minute * 15)},
 	}
 
@@ -54,4 +55,43 @@ func CreateAccessToken(userId primitive.ObjectID) (string, error) {
 		return "", err
 	}
 	return tokenString, nil
+}
+
+var (
+	ErrInvalidToken  = errors.New("invalid access token")
+	ErrTokenExpired  = errors.New("token has expired")
+	ErrInvalidIssuer = errors.New("invalid token issuer")
+)
+
+func ValidateAccessToken(accessToken string) (string, error) {
+	token, err := jwt.ParseWithClaims(accessToken, &jwt.RegisteredClaims{}, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, ErrInvalidToken
+		}
+		return []byte(config.GetEnv("TOKEN_SIGNATURE")), nil
+	})
+
+	if err != nil {
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			return "", ErrTokenExpired
+		}
+		return "", ErrInvalidToken
+	}
+
+	claims, ok := token.Claims.(*jwt.RegisteredClaims)
+	if !ok || !token.Valid {
+		return "", ErrInvalidToken
+	}
+
+	if claims.Issuer != "auth-service" {
+		return "", ErrInvalidIssuer
+	}
+
+	// UUID format kontrolü
+	userUUID := claims.Subject
+	if _, err := uuid.Parse(userUUID); err != nil {
+		return "", ErrInvalidToken
+	}
+
+	return userUUID, nil
 }
