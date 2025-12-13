@@ -1,9 +1,10 @@
-
+# Kafka Operator - Geliştirme Kaynak Limitleri
+# Yerel geliştirme için düşük kaynak kullanımı
 strimzi-kafka-operator:
   resources:
     requests:
-      memory: 512Mi
       cpu: 100m
+      memory: 512Mi
     limits:
-      memory: 1024Mi
       cpu: 500m
+      memory: 1024Mi

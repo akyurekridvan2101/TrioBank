@@ -1,6 +1,6 @@
 
 apiVersion: v2
-name: external-secrets
+name: external-secrets-operator
 description: External Secrets Operator - Harici secret yönetim sistemi
 type: application
 version: 0.1.0

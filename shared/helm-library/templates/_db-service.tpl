@@ -1,108 +1,52 @@
 {{/*
-================================================================================
-Database Service Template - ExternalName Service Abstraction
-================================================================================
-
-AÇIKLAMA:
-  Kubernetes cluster DIŞINDA çalışan database'lere (MSSQL, MongoDB, Redis, PostgreSQL vs)
-  cluster içinden erişim için DNS abstraction sağlar.
+==============================================================================
+TrioBank - Database Service Template
+ExternalName Service for external databases (MSSQL, PostgreSQL, MongoDB, Redis)
+==============================================================================
 
 KULLANIM:
   Service chart'ında db-service.yaml oluştur:
-  
-  ```yaml
   {{- include "common.database-services" . }}
-  ```
 
-NE YAPAR:
-  ExternalName Service'ler oluşturur. Pod'lar dış database'lere sanki 
-  cluster içindeymiş gibi bağlanır.
+AMAÇ:
+  Kubernetes cluster dışındaki database'lere cluster içinden erişim sağlar.
+  DNS abstraction ile pod'lar sanki database cluster içindeymiş gibi bağlanır.
 
-DNS ÇALIŞMA PRENSİBİ:
-  Pod içinden:        ledger-mssql.triobank.svc.cluster.local:1433
-                      ↓
-  Kubernetes DNS:     ExternalName Service (CNAME)
-                      ↓
-  Gerçek Endpoint:    host.docker.internal (local)
-                      prod-mssql.azure.com (production)
-
-CONFIGURATION (values.yaml):
-
+VALUES EXAMPLE:
   database:
     enabled: true
     serviceName: "ledger-mssql"
+    externalName: "host.docker.internal"  # Local dev
     port: 1433
     type: "mssql"
-    externalName: "host.docker.internal"
-  
-  databases:
+
+  databases:                               # Multiple databases
     mssql:
       enabled: true
       serviceName: "ledger-mssql"
+      externalName: "prod-mssql.database.windows.net"
       port: 1433
       type: "mssql"
-      externalName: "prod-mssql.database.windows.net"
-      annotations:
-        description: "Primary transactional database"
-    
-    mongodb:
-      enabled: true
-      serviceName: "ledger-mongo"
-      port: 27017
-      type: "mongodb"
-      externalName: "prod-mongo.cosmos.azure.com"
-    
     redis:
       enabled: true
       serviceName: "ledger-redis"
+      externalName: "prod-redis.cache.windows.net"
       port: 6379
       type: "redis"
-      externalName: "prod-redis.cache.windows.net"
 
-DATABASE TYPES (Auto Port/PortName Detection):
-  Type        Default Port    PortName
-  ────────────────────────────────────
-  mssql       1433           mssql
-  postgresql  5432           postgresql
-  mongodb     27017          mongodb
-  mysql       3306           mysql
-  redis       6379           redis
-  postgres    5432           postgresql
+DATABASE TYPES (auto-detected defaults):
+  mssql      -> port: 1433
+  postgresql -> port: 5432
+  mongodb    -> port: 27017
+  mysql      -> port: 3306
+  redis      -> port: 6379
 
-ENVIRONMENT EXAMPLES:
-
-  Local Development:
-    externalName: host.docker.internal (Docker Desktop)
-    externalName: host.minikube.internal (Minikube)
-  
-  Azure Cloud:
-    externalName: mydb.database.windows.net (Azure SQL)
-    externalName: mydb.cosmos.azure.com (Cosmos DB)
-    externalName: myredis.redis.cache.windows.net (Azure Cache)
-  
-  AWS Cloud:
-    externalName: mydb.xxxxx.us-east-1.rds.amazonaws.com (RDS)
-    externalName: myredis.xxxxx.cache.amazonaws.com (ElastiCache)
-  
-  On-Premise:
-    externalName: db.company.internal
-    externalName: 192.168.1.100 (IP address)
-
-BEST PRACTICES:
-  ✓ Never hardcode credentials in values
-  ✓ Use Vault/ExternalSecrets for secrets
-  ✓ Set proper firewall rules for external DB access
-  ✓ Use SSL/TLS for production databases
-  ✓ Monitor connection pools and latency
-
-================================================================================
+==============================================================================
 */}}
 
 {{/*
-================================================================================
-Helper: Database Type Defaults
+Helper: Database type defaults
 Returns default port and portName for common database types
-================================================================================
 */}}
 {{- define "common.db-defaults" -}}
 {{- $type := . -}}
@@ -128,10 +72,9 @@ portName: unknown
 {{- end -}}
 
 {{/*
-================================================================================
-Main Template: Database Services (Multiple Databases Support)
+Main Template: Database Services
 Creates ExternalName services for all enabled databases
-================================================================================
+Supports both single database mode and multiple databases mode
 */}}
 {{- define "common.database-services" -}}
 
@@ -155,10 +98,8 @@ Creates ExternalName services for all enabled databases
 {{- end -}}
 
 {{/*
-================================================================================
 Single Database Service Template
 Creates one ExternalName Service for a database
-================================================================================
 */}}
 {{- define "common.db-service-single" -}}
 {{- $config := .config -}}

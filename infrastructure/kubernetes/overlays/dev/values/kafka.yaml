@@ -1,8 +1,12 @@
+# Geliştirme Ortamı Geçersiz Kılım
+# Yerel geliştirme için optimize edilmiş ayarlar
 
+# NodePool depolama - yerel için küçültülmüş
 nodePool:
   storage:
     size: 2Gi  # Base'de 5Gi, local'de yeter
 
+# Kafka kaynak limitleri - yerel geliştirme için optimize edilmiş
 kafka:
   resources:
     requests:
@@ -16,6 +20,7 @@ kafka:
     -Xms: 256m
     -Xmx: 512m
 
+# Entity Operator kaynak limitleri
 entityOperator:
   topicOperator:
     resources:
@@ -35,6 +40,7 @@ entityOperator:
         memory: 256Mi
         cpu: 200m
 
+# Kafka Connect resource limits
 connect:
   resources:
     requests:

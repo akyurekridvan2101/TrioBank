@@ -2,10 +2,12 @@
 vault:
   enabled: true
   
+  # ArgoCD sync wave - İlk deploy edilecek servislerden biri
   commonAnnotations:
     argocd.argoproj.io/sync-wave: "200"
   
-  externalHost: ""  # Overlay'de set et
+  # External Vault host - overlay'de environment'a göre set edilir
+  externalHost: ""
   
   service:
     name: vault

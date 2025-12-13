@@ -1,3 +1,8 @@
+# ==============================================================================
+# ArgoCD Apps Helm Chart
+# App of Apps pattern - Platform ve Services ApplicationSet'lerini içerir
+# Root application tarafından render edilir
+# ==============================================================================
 apiVersion: v2
 name: argocd-apps
 description: TrioBank bootstrapping applications (Platform & Services)

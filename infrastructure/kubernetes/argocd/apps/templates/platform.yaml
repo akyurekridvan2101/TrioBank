@@ -1,37 +1,49 @@
-
+# ==============================================================================
+# Platform Services ApplicationSet
+# Shared infrastructure services (Vault, Kafka, External Secrets, vb.)
+# ==============================================================================
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
   name: platform
   namespace: argocd
 spec:
+  # Generator - Platform servislerini list generator ile tanımlar
+  # Sync wave ile deployment sırası kontrol edilir
   generators:
     - list:
         elements:
-          - app: external-secrets
-            path: infrastructure/kubernetes/base/platform/helm-charts/external-secrets
+          # External Secrets Operator - İlk deploy edilir (Vault secret sync için)
+          - app: external-secrets-operator
+            path: infrastructure/kubernetes/base/platform/helm-charts/external-secrets-operator
             wave: "100"
 
+          # Vault - Secret management (External Secrets'tan sonra)
           - app: vault
             path: infrastructure/kubernetes/base/platform/helm-charts/vault
             wave: "200"
 
+          # Kafka Operator - Kafka CRD'lerini yönetir
           - app: kafka-operator
             path: infrastructure/kubernetes/base/platform/helm-charts/kafka-operator
             wave: "300"
 
+          # Kafka Cluster - Operator'dan sonra deploy edilir
           - app: kafka
             path: infrastructure/kubernetes/base/platform/helm-charts/kafka
             wave: "400"
 
+          # Kafka Connect - CDC connector'ları için (Kafka'dan sonra)
           - app: connect
             path: infrastructure/kubernetes/base/platform/helm-charts/connect
             wave: "500"
 
+          # Kafka UI - Monitoring (En son, tüm servisler hazır olmalı)
           - app: kafka-ui
             path: infrastructure/kubernetes/base/platform/helm-charts/kafka-ui
             wave: "600"
 
+  # Application template - Her platform servisi için uygulanır
   template:
     metadata:
       name: '{{`{{app}}`}}'
@@ -43,23 +55,26 @@ spec:
     spec:
       project: default
 
+      # Git source configuration
       source:
         repoURL: {{ .Values.repoURL }}
         targetRevision: {{ .Values.branch }}
         path: '{{`{{path}}`}}'
         helm:
           valueFiles:
-            - values.yaml
-            - ../../../../overlays/{{ .Values.env }}/values/{{`{{app}}`}}.yaml
+            - values.yaml  # Base values
+            - ../../../../overlays/{{ .Values.env }}/values/{{`{{app}}`}}.yaml  # Environment-specific overrides
 
+      # Deployment destination
       destination:
         server: https://kubernetes.default.svc
         namespace: triobank
 
+      # Sync policy - Automated GitOps
       syncPolicy:
         automated:
-          prune: true
-          selfHeal: true
+          prune: true       # Silinen kaynakları otomatik temizle
+          selfHeal: true    # Manuel değişiklikleri geri al
         syncOptions:
           - CreateNamespace=true
           - ServerSideApply=true
@@ -70,13 +85,17 @@ spec:
             factor: 2
             maxDuration: 3m
 
+      # Ignore differences - ArgoCD drift detection'dan hariç tut
       ignoreDifferences:
+        # Kafka Connector - Runtime'da değişebilen config'ler
         - group: kafka.strimzi.io
           kind: KafkaConnector
           jsonPointers:
             - /spec/config/config.providers
             - /spec/config/config.storage.replication.factor
             - /spec/config/config.storage.topic
+        
+        # External Secret - Vault'tan dinamik çekilen değerler
         - group: external-secrets.io
           kind: ExternalSecret
           jsonPointers:

@@ -1,35 +1,176 @@
-# --- Proje Temizligi (Clean-up) ---
+# ====================================================================
+# TrioBank Platform - .gitignore
+# Mikroservis monorepo için profesyonel Git ignore yapılandırması
+# ====================================================================
+
+# --------------------------------------------------------------------
+# Go Language (Mikroservisler: auth-service, mail-service, vb.)
+# --------------------------------------------------------------------
+# Compiled binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/bin/
+/pkg/
+
+# Test binary, coverage files
+*.test
+*.out
+coverage.txt
+coverage.html
+
+# Go workspace files
+go.work
+go.work.sum
+
+# Vendor directory (dependency caching)
+vendor/
+
+# Air live reload (local development tool)
+tmp/
+.air.toml
+
+# --------------------------------------------------------------------
+# Java/Maven (Eğer gelecekte Java servisleri eklersek)
+# --------------------------------------------------------------------
 /target/
 /out/
-.mvn/wrapper/maven-wrapper.jar
+*.class
 dependency-reduced-pom.xml
 pom.xml.tag
 pom.xml.releaseBackup
 pom.xml.versionsBackup
-pom.xml.next
 release.properties
 buildNumber.properties
 
-# --- IntelliJ / IDE (Sizin Kullanacaginiz Araclar) ---
+# --------------------------------------------------------------------
+# IDE ve Editor Dosyaları
+# --------------------------------------------------------------------
+# IntelliJ IDEA
 .idea/
 *.iws
 *.iml
 *.ipr
-*.class
-*.log
 
-# --- Kubernetes / Terraform State (HAYATI ONEMLI) ---
+# VS Code
+.vscode/
+*.code-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# --------------------------------------------------------------------
+# Kubernetes & Helm
+# --------------------------------------------------------------------
+# Helm dependency charts (node_modules gibi)
+charts/*.tgz
+**/charts/*.tgz
+
+# Helm values with secrets (production overrides)
+values-secret.yaml
+*-secrets.yaml
+
+# Kustomize generated files
+kustomization-generated.yaml
+
+# --------------------------------------------------------------------
+# Terraform (Infrastructure as Code)
+# --------------------------------------------------------------------
 .terraform/
 *.tfstate
 *.tfstate.*
-*.tfvars          # Burayi sormustun: Datalari korumak icin ekliyoruz.
+*.tfstate.backup
+*.tfvars           #민감한 değişkenler (DB passwords, API keys)
+.terraform.lock.hcl
 tfplan
+tfplan.json
+crash.log
+override.tf
+override.tf.json
 
-# --- Secrets ve Calisma Dosyalari ---
-*.env             # Postgres/Microservice Sifreleri (Örn: postgres.env)
+# --------------------------------------------------------------------
+# Docker & Container Images
+# --------------------------------------------------------------------
+# Local docker-compose overrides
+docker-compose.override.yml
+
+# Dockerfile build cache
+.dockerignore.local
+
+# --------------------------------------------------------------------
+# Environment Variables & Secrets (KRİTİK!)
+# --------------------------------------------------------------------
+.env
+.env.*
+!.env.example      # Example files are OK
+*.env
+
+# Secret files
 *.key
 *.pem
 *.cert
+*.crt
+*.p12
+*.jks
+kubeconfig
+kubeconfig.*
 
-# --- OS ---
+# Vault unseal keys (eğer local'de test ediliyorsa)
+vault-keys.txt
+unseal-keys.json
+
+# ArgoCD local manifests (generated)
+argocd-generated/
+
+# --------------------------------------------------------------------
+# Database & Data Files
+# --------------------------------------------------------------------
+# Local SQL dumps
+*.sql
+*.dump
+*.db
+*.sqlite
+*.sqlite3
+
+# MongoDB local data
+data/db/
+
+# --------------------------------------------------------------------
+# OS Specific Files
+# --------------------------------------------------------------------
+# macOS
 .DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+.directory
+.Trash-*
+
+# --------------------------------------------------------------------
+# Temporary & Cache Files
+# --------------------------------------------------------------------
+*.tmp
+*.temp
+*.cache
+.cache/
+node_modules/      # Eğer frontend tooling eklersek
+.npm/
+
+# --------------------------------------------------------------------
+# Backup Files
+# --------------------------------------------------------------------
+*.bak
+*.backup
+*~.nib
+*.orig

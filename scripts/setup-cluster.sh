@@ -36,31 +36,43 @@ kubectl create secret generic vault-token \
 
 # --- Environment Selection ---
 echo "🌍 Hangi ortamı kurmak istiyorsunuz?"
-echo "1) Dev (Geliştirme - Branch seçebilirsiniz)"
-echo "2) Prod (Canlı - Sadece 'main' branch)"
+echo "1) Dev (Geliştirme - develop branch)"
+echo "2) Prod (Üretim - main branch)"
 read -r ENV_CHOICE
 
-if [[ "$ENV_CHOICE" == "2" ]]; then
-    echo "🚀 Prod Ortamı seçildi. 'main' branch deploy ediliyor..."
-    echo "🌱 Applying Root App (Prod Env)..."
-    kubectl apply -f infrastructure/kubernetes/argocd/overlays/prod/root.yaml
-else
-    # --- Branch Detection (Only for Dev) ---
-    DETECTED_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-    echo "🌿 Tespit Edilen Git Branch: '$DETECTED_BRANCH'"
-    echo "❓ Bu branch ile devam edilsin mi? (Enter = Evet / H = Değiştir)"
-    read -r USER_CHOICE
+if [[ "$ENV_CHOICE" == "1" ]]; then
+    # ===== DEV ENVIRONMENT =====
+    echo "🚀 Dev ortamı seçildi"
+    echo "🌿 Default branch: develop"
+    echo "❓ Hangi branch deploy edilsin?"
+    echo "   → ENTER'a bas = develop branch kullanılır"
+    echo "   → Branch adı yaz = o branch kullanılır (örn: feature/yeni-ozellik)"
+    read -r CUSTOM_BRANCH
 
-    if [[ "$USER_CHOICE" =~ ^[Hh]$ ]]; then
-        echo "✏️  Lütfen Branch adını girin (Örn: feature/yenilik):"
-        read -r TARGET_BRANCH
+    if [[ -z "$CUSTOM_BRANCH" ]]; then
+        # Boş input - develop branch kullan (root.yaml'daki default)
+        echo "✅ develop branch ile deploy ediliyor..."
+        echo "🌱 Root Application deploy ediliyor..."
+        kubectl apply -f infrastructure/kubernetes/argocd/overlays/dev/root.yaml
     else
-        TARGET_BRANCH=$DETECTED_BRANCH
+        # Custom branch override
+        echo "✅ $CUSTOM_BRANCH branch ile deploy ediliyor..."
+        echo "🌱 Root Application deploy ediliyor (Branch override)..."
+        sed "s|targetRevision: .*|targetRevision: $CUSTOM_BRANCH|g; s|branch: .*|branch: $CUSTOM_BRANCH|g" \
+            infrastructure/kubernetes/argocd/overlays/dev/root.yaml | kubectl apply -f -
     fi
-    
-    echo "🚀 Hedef Branch: $TARGET_BRANCH"
-    echo "🌱 Applying Root App (Dev Env - Dynamic)..."
-    sed "s|targetRevision: .*|targetRevision: $TARGET_BRANCH|g; s|branch: .*|branch: $TARGET_BRANCH|g" infrastructure/kubernetes/argocd/overlays/dev/root.yaml | kubectl apply -f -
+
+elif [[ "$ENV_CHOICE" == "2" ]]; then
+    # ===== PROD ENVIRONMENT =====
+    echo "🚀 Prod ortamı seçildi (main branch)"
+    echo "🌱 Root Application deploy ediliyor..."
+    kubectl apply -f infrastructure/kubernetes/argocd/overlays/prod/root.yaml
+
+else
+    # ===== INVALID INPUT =====
+    echo "❌ Hatalı seçim! Sadece 1 veya 2 girebilirsiniz."
+    echo "💡 Script'i tekrar çalıştırın: ./scripts/setup-cluster.sh"
+    exit 1
 fi
 
 echo "✅ Bootstrap Complete!"

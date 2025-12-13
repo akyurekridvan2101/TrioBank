@@ -1,3 +1,5 @@
+# TrioBank Platform Namespace
+# Tüm mikroservisler ve platform servisleri (Kafka, Vault, vb.) bu namespace'de çalışır
 apiVersion: v1
 kind: Namespace
 metadata:
