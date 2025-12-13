@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/TrioBank/triobank-platform/microservices/auth-service/pkg"
+	"github.com/segmentio/kafka-go"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -21,6 +22,7 @@ type Repo struct {
 	DataBase       DataBaseI
 	SessionManager SessionManagerI
 	Client         *http.Client
+	Producer       *kafka.Writer
 }
 
 func (repo Repo) login(w http.ResponseWriter, r *http.Request) {
@@ -385,7 +387,20 @@ func (repo Repo) RegisterConfirm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// kafka event yayınlanacak
+	// kafka is going to publish an event
+	userJson, err := json.Marshal(user)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("something went wrong in server side"))
+		return
+	}
+	err = SendKafkaEvent(repo.Producer, ctx, user.Id.String(), userJson, "UserCreated", "UserCreated")
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("UserCreated event could not be sent"))
+		return
+	}
+
 	err = repo.SessionManager.removeLimitByTc(ctx, user.Tc)
 	if err != nil {
 		fmt.Println(err.Error())

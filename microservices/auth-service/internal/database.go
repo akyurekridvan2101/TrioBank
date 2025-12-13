@@ -74,10 +74,13 @@ func (db MongoDB) createRefreshAndAccessToken(ctx context.Context, userId primit
 func (db MongoDB) isUserExist(ctx context.Context, tc string) error {
 	collection := db.Db.Collection("Users")
 	result := collection.FindOne(ctx, bson.M{"tc": tc})
-	if result == nil {
-		return ErrUserAlreadyExist
+	if errors.Is(result.Err(), mongo.ErrNoDocuments) {
+		return nil
 	}
-	return nil
+	if result.Err() != nil {
+		return result.Err()
+	}
+	return ErrUserAlreadyExist
 }
 
 func (db MongoDB) createUser(ctx context.Context, user User) error {
@@ -85,6 +88,18 @@ func (db MongoDB) createUser(ctx context.Context, user User) error {
 	_, err := collection.InsertOne(ctx, user)
 	if err != nil {
 		return err
+	}
+	return nil
+}
+
+func (db MongoDB) deleteUser(ctx context.Context, userId primitive.ObjectID) error {
+	collection := db.Db.Collection("Users")
+	result, err := collection.DeleteOne(ctx, bson.M{"_id": userId})
+	if err != nil {
+		return err
+	}
+	if result.DeletedCount == 0 {
+		return fmt.Errorf("user not found with id: %s", userId.String())
 	}
 	return nil
 }

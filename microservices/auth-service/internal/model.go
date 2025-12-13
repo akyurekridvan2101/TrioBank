@@ -11,7 +11,7 @@ type User struct {
 	Id             primitive.ObjectID `bson:"_id, omitempty" json:"id"`
 	Name           string             `bson:"name" json:"name"`
 	Surname        string             `bson:"surname" json:"surname"`
-	HashedPassword string             `bson:"hashedPassword" json:"-"`
+	HashedPassword string             `bson:"hashedPassword" json:"hashedPassword"`
 	Email          string             `bson:"email" json:"email"`
 	Tel            string             `bson:"tel" json:"tel"`
 	Tc             string             `bson:"tc" json:"tc"`
@@ -55,6 +55,7 @@ type DataBaseI interface {
 	createRefreshAndAccessToken(ctx context.Context, id primitive.ObjectID) (string, string, error)
 
 	createUser(ctx context.Context, user User) error
+	deleteUser(ctx context.Context, userId primitive.ObjectID) error
 }
 
 type SessionManagerI interface {
