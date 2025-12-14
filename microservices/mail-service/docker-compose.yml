@@ -41,4 +41,5 @@ services:
 
 networks:
   triobank-network:
-    driver: bridge
+    external: true
+    name: triobank-network
