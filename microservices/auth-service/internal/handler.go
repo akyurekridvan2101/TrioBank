@@ -637,12 +637,14 @@ func (repo Repo) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 	c, err := r.Cookie("Refresh-Token")
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte("there is no refresh token in request"))
 		return
 	}
 
 	token := r.Header.Get("Authorization")
 	if !strings.HasPrefix(token, "Bearer ") {
 		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte("the authorization header is not appropriate"))
 		return
 	}
 	AccessToken := strings.TrimPrefix(token, "Bearer ")
@@ -650,6 +652,7 @@ func (repo Repo) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 	userUuid, err := pkg.ValidateAccessToken(AccessToken)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte("access token is not valid"))
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), time.Second*3)
@@ -660,28 +663,33 @@ func (repo Repo) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 	err = json.NewDecoder(r.Body).Decode(&request)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte("request could not be decoded"))
 		return
 	}
 	userId, err := repo.DataBase.validateUserPassword(ctx, userUuid, request.Password)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte("password is not valid"))
 		return
 	}
 
 	err = repo.DataBase.inActiveRefreshToken(ctx, c.Value)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("something went wrong while inactivate refresh token"))
 		return
 	}
 	user, err := repo.DataBase.getUserById(ctx, userId)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("an error occured while getting user by id"))
 		return
 	}
 
 	err = repo.DataBase.deleteUser(ctx, userId)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("an error occured while deleting user"))
 		return
 	}
 	cookie := http.Cookie{
@@ -701,6 +709,7 @@ func (repo Repo) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 	err = SendKafkaEvent(repo.Producer, ctx, userUuid, userJson, "UserDeleted", "UserDeleted")
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("user deleted event could not sent to kafka server"))
 		return
 	}
 

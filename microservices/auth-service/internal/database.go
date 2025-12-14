@@ -275,7 +275,15 @@ func (db RedisDB) getUser(ctx context.Context, userId primitive.ObjectID) (User,
 func StartMongoDB() *mongo.Database {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
 	defer cancel()
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI(config.GetEnv("MONGO_URI")))
+
+	mongoURI := config.GetEnv("MONGO_URI")
+	mongoUsername := config.GetEnv("MONGO_USERNAME")
+	mongoPassword := config.GetEnv("MONGO_PASSWORD")
+
+	if mongoUsername != "" && mongoPassword != "" {
+		mongoURI = fmt.Sprintf("mongodb://%s:%s@localhost:27017", mongoUsername, mongoPassword)
+	}
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(mongoURI))
 	if err != nil {
 		log.Fatal("mongodb connection error: ", err.Error())
 	}
@@ -293,6 +301,7 @@ func StartRedisDB() *redis.Client {
 	defer cancel()
 	client := redis.NewClient(&redis.Options{
 		Addr:       config.GetEnv("REDIS_PORT"),
+		Password:   config.GetEnv("REDIS_PASSWORD"),
 		DB:         0,
 		ClientName: config.GetEnv("REDIS_NAME"),
 	})
