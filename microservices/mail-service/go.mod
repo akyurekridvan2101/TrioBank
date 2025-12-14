@@ -1,6 +1,6 @@
 module github.com/TrioBank/triobank-platform/microservices/mail-service
 
-go 1.25.2
+go 1.23
 
 require github.com/joho/godotenv v1.5.1
 

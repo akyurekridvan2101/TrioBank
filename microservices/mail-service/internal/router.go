@@ -9,11 +9,17 @@ import (
 func StartRouter(client Client) {
 
 	http.Handle("/send", middleWare(client.sendMailHandler))
+	http.HandleFunc("/health", healthCheckHandler)
 
 	err := http.ListenAndServe(os.Getenv("MAIL_SERVICE_PORT"), nil)
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("OK"))
 }
 
 func middleWare(f http.HandlerFunc) http.HandlerFunc {
