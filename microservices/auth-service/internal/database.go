@@ -281,7 +281,21 @@ func StartMongoDB() *mongo.Database {
 	mongoPassword := config.GetEnv("MONGO_PASSWORD")
 
 	if mongoUsername != "" && mongoPassword != "" {
-		mongoURI = fmt.Sprintf("mongodb://%s:%s@localhost:27017", mongoUsername, mongoPassword)
+		if mongoURI == "" {
+			mongoURI = "mongodb://localhost:27017"
+		}
+		mongoHost := "localhost:27017"
+		if len(mongoURI) > 10 {
+			uriWithoutPrefix := mongoURI[10:]
+
+			if len(uriWithoutPrefix) > 0 && uriWithoutPrefix[len(uriWithoutPrefix)-1] == '/' {
+				uriWithoutPrefix = uriWithoutPrefix[:len(uriWithoutPrefix)-1]
+			}
+			if uriWithoutPrefix != "" {
+				mongoHost = uriWithoutPrefix
+			}
+		}
+		mongoURI = fmt.Sprintf("mongodb://%s:%s@%s", mongoUsername, mongoPassword, mongoHost)
 	}
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(mongoURI))
 	if err != nil {

@@ -85,12 +85,8 @@ services:
       SECRET_KEY: ${SECRET_KEY:-lX^hNp19%X^AkdA4eoJQojcFe3ljK*dg}
       MAIL_SERVICE_PORT: "MailService:8081"
       TOKEN_SIGNATURE: ${TOKEN_SIGNATURE:-CWBovGHw91S3cwVWN06npAWmBOB8c36i2kCvmFNILJDzfOhpA4XTuLwyp6HoL1ED}
-    env_file:
-      - config/.env
     ports:
       - "8080:8080"
-    profiles:
-      - full-stack # Use this to run auth service in Docker
     networks:
       - default
       - triobank-network

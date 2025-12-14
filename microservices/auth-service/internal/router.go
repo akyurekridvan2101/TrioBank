@@ -10,6 +10,8 @@ import (
 func StartRouter(r Repo) {
 	// handler will be placed here
 
+	http.HandleFunc("/auth/health", middleware(Health))
+
 	http.HandleFunc("/auth/login", middleware(r.login))
 	http.HandleFunc("/auth/login/confirm", middleware(r.LoginConfirm))
 
