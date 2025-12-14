@@ -32,6 +32,7 @@ func StartRouter(r Repo) {
 func middleware(handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// middleware islemleri (logging, rate and limiting cors etc.)
+		// cors
 
 		handler(w, r)
 	}

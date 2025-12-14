@@ -85,7 +85,7 @@ func (db MongoDB) createAccessToken(ctx context.Context, refreshToken string) (s
 }
 func (db MongoDB) inActiveRefreshToken(ctx context.Context, refreshToken string) error {
 	collection := db.Db.Collection("Tokens")
-	_, err := collection.UpdateOne(ctx, bson.M{"token": refreshToken, "active": true}, bson.M{"$set": bson.M{"active": false}})
+	_, err := collection.UpdateOne(ctx, bson.M{"token": refreshToken, "isActive": true}, bson.M{"$set": bson.M{"isActive": false}})
 	return err
 }
 

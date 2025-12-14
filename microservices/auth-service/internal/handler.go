@@ -402,7 +402,7 @@ func (repo Repo) RegisterConfirm(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("something went wrong in server side"))
 		return
 	}
-	err = SendKafkaEvent(repo.Producer, ctx, user.Id.String(), userJson, "UserCreated", "UserCreated")
+	err = SendKafkaEvent(repo.Producer, ctx, user.UUID, userJson, "UserCreated", "UserCreated")
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte("UserCreated event could not be sent"))
@@ -451,7 +451,7 @@ func (repo Repo) Logout(w http.ResponseWriter, r *http.Request) {
 
 	if c, err := r.Cookie("Refresh-Token"); err == nil {
 
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+		ctx, cancel := context.WithTimeout(r.Context(), time.Second*3)
 		defer cancel()
 
 		err = repo.DataBase.inActiveRefreshToken(ctx, c.Value)
@@ -470,7 +470,7 @@ func (repo Repo) RefreshAccessToken(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+	ctx, cancel := context.WithTimeout(r.Context(), time.Second*3)
 	defer cancel()
 	c, err := r.Cookie("Refresh-Token")
 	if err != nil {
@@ -560,7 +560,7 @@ func (repo Repo) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+	ctx, cancel := context.WithTimeout(r.Context(), time.Second*3)
 	defer cancel()
 
 	if !strings.HasPrefix(token, "Bearer ") {
@@ -609,6 +609,14 @@ func (repo Repo) ChangePassword(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	result, err := repo.SessionManager.setAndControlLimitById(ctx, userId)
+	if !result {
+		w.WriteHeader(http.StatusTooManyRequests)
+		return
+	}
+
+	defer repo.SessionManager.removeLimitById(ctx, userId)
+
 	err = repo.DataBase.updatePassword(ctx, userId, NewHashedPassword)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -620,5 +628,83 @@ func (repo Repo) ChangePassword(w http.ResponseWriter, r *http.Request) {
 }
 
 func (repo Repo) DeleteAccount(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
 
+	if r.Method != http.MethodDelete {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	c, err := r.Cookie("Refresh-Token")
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	token := r.Header.Get("Authorization")
+	if !strings.HasPrefix(token, "Bearer ") {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	AccessToken := strings.TrimPrefix(token, "Bearer ")
+
+	userUuid, err := pkg.ValidateAccessToken(AccessToken)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), time.Second*3)
+	defer cancel()
+	request := struct {
+		Password string `json:"password"`
+	}{}
+	err = json.NewDecoder(r.Body).Decode(&request)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	userId, err := repo.DataBase.validateUserPassword(ctx, userUuid, request.Password)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	err = repo.DataBase.inActiveRefreshToken(ctx, c.Value)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	user, err := repo.DataBase.getUserById(ctx, userId)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	err = repo.DataBase.deleteUser(ctx, userId)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	cookie := http.Cookie{
+		Name:     "Refresh-Token",
+		Value:    "",
+		Secure:   true,
+		HttpOnly: true,
+		Path:     "/",
+		MaxAge:   -1,
+	}
+
+	userJson, err := json.Marshal(&user)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	err = SendKafkaEvent(repo.Producer, ctx, userUuid, userJson, "UserDeleted", "UserDeleted")
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	http.SetCookie(w, &cookie)
+	w.WriteHeader(http.StatusOK)
+	return
 }
