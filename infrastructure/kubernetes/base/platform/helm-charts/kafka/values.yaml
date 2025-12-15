@@ -1,0 +1,58 @@
+enabled: true
+
+# ArgoCD sync wave - Kafka operator'den sonra deploy edilir
+commonAnnotations:
+  argocd.argoproj.io/sync-wave: "400"
+
+cluster:
+  name: kafka
+  namespace: triobank
+
+# Kafka Node Pool Configuration
+# KRaft modunda broker ve controller rollerini tanımlar
+nodePool:
+  name: triobank-pool
+  replicas: 1  # Üretimde 3+ olmalı
+  
+  roles:
+    - controller  # Metadata yönetimi (KRaft)
+    - broker      # Mesaj işleme
+  
+  storage:
+    type: persistent-claim
+    size: 5Gi
+    deleteClaim: true  # Pod silinince PVC de silinir
+
+# Kafka Cluster Configuration
+kafka:
+  version: "4.0.1"
+  metadataVersion: "4.0-IV0"  # KRaft metadata format sürümü
+
+  # Dinleyiciler (dahili iletişim)
+  listeners:
+    - name: plain
+      port: 9092
+      type: internal
+      tls: false  # Düz metin - yerel geliştirme için
+    
+    - name: tls
+      port: 9093
+      type: internal
+      tls: true  # TLS şifreli - üretim için
+
+  # Kafka broker configuration
+  # Replication factor'ler 1 (local dev), production'da 3 olmalı
+  config:
+    offsets.topic.replication.factor: 1
+    transaction.state.log.replication.factor: 1
+    transaction.state.log.min.isr: 1
+    default.replication.factor: 1
+    min.insync.replicas: 1
+    auto.create.topics.enable: true
+
+# Entity Operator - Kafka CRD'lerini yönetir
+entityOperator:
+  topicOperator:
+    enabled: true  # KafkaTopic CRD yönetimi
+  userOperator:
+    enabled: true  # KafkaUser CRD yönetimi

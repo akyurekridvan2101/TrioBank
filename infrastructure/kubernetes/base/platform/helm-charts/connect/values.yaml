@@ -1,0 +1,53 @@
+enabled: true
+
+build:
+  enabled: false  # Pre-built image kullanılıyor
+
+# ArgoCD sync wave - Kafka kümesinden sonra deploy edilir
+commonAnnotations:
+  argocd.argoproj.io/sync-wave: "500"
+
+replicaCount: 1
+version: 4.0.1
+bootstrapServers: "kafka-kafka-bootstrap.triobank.svc.cluster.local:9092"
+
+# Debezium connector'ları içeren custom image
+image: akyurekridvan2101/debezium-connect:3.3.0
+
+# Kafka Connect Yapılandırması
+config:
+  plugin.path: "/opt/kafka/plugins"
+
+  # Config providers - Secret'ları file/directory'den okur
+  config.providers: file,directory
+  config.providers.file.class: org.apache.kafka.common.config.provider.FileConfigProvider
+  config.providers.directory.class: org.apache.kafka.common.config.provider.DirectoryConfigProvider
+  
+  # Connect küme ayarları
+  group.id: connect-cluster
+  offset.storage.topic: connect-offsets
+  config.storage.topic: connect-configs
+  status.storage.topic: connect-status
+
+  # JSON dönüştürücü ayarları
+  key.converter: org.apache.kafka.connect.json.JsonConverter
+  value.converter: org.apache.kafka.connect.json.JsonConverter
+  key.converter.schemas.enable: false
+  value.converter.schemas.enable: false
+
+  # Replikasyon faktörleri (yerel: 1, üretim: 3)
+  config.storage.replication.factor: 1
+  offset.storage.replication.factor: 1
+  status.storage.replication.factor: 1
+
+  # Topic oluşturma ayarları
+  topic.creation.enable: true
+  topic.creation.default.partitions: 3
+  topic.creation.default.replication.factor: 1
+  topic.creation.compacted.cleanup.policy: compact
+
+# Database credentials - Vault'tan gelen secret'lar
+externalConfiguration:
+  secretsToMount:
+    - name: ledger-db-credentials
+      secretName: ledger-db-credentials
