@@ -1,0 +1,91 @@
+services:
+  # ----------------------------------------------------------------
+  # 1. MSSQL SERVER (İlişkisel Veritabanı)
+  # ----------------------------------------------------------------
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: local-mssql
+    hostname: mssql
+    restart: unless-stopped
+    ports:
+      - "1433:1433"
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=${MSSQL_SA_PASSWORD}
+      - MSSQL_PID=Developer
+      - MSSQL_AGENT_ENABLED=true
+    volumes:
+      - mssql_data:/var/opt/mssql
+
+  # ----------------------------------------------------------------
+  # 2. MONGODB (NoSQL / Log ve Doküman Veritabanı)
+  # ----------------------------------------------------------------
+  mongodb:
+    image: mongo:6.0
+    container_name: local-mongo
+    hostname: mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_INITDB_ROOT_USERNAME}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
+    volumes:
+      - mongo_data:/data/db
+
+  # ----------------------------------------------------------------
+  # 3. REDIS (Cache / Session Yönetimi)
+  # ----------------------------------------------------------------
+  redis:
+    image: redis:7.0-alpine
+    container_name: local-redis
+    hostname: redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    # Şifre koruması ve veri kalıcılığı (AOF) aktif
+    command: redis-server --requirepass ${REDIS_PASSWORD} --appendonly yes
+    volumes:
+      - redis_data:/data
+
+  # ----------------------------------------------------------------
+  # 4. VAULT (Şifre Kasası - Prod Modu / Dosyasız Config)
+  # ----------------------------------------------------------------
+  # --- KURULUM VE KİLİT AÇMA (UNSEAL) ADIMLARI ---
+  # 1. İlk Başlatma (Key ve Token almak için):
+  #    docker exec -ti local-vault vault operator init
+  #    (Çıkan 5 Unseal Key'i ve Root Token'ı MUTLAKA saklayın!)
+  #
+  # 2. Kilidi Açma (3 farklı Key ile):
+  #    docker exec -ti local-vault vault operator unseal <KEY_1_BURAYA>
+  #    docker exec -ti local-vault vault operator unseal <KEY_2_BURAYA>
+  #    docker exec -ti local-vault vault operator unseal <KEY_3_BURAYA>
+  #
+  # 3. Giriş Yapma (Root Token ile):
+  #    docker exec -ti local-vault vault login <ROOT_TOKEN_BURAYA>
+  # ----------------------------------------------------------------
+  vault:
+    image: hashicorp/vault:1.15
+    container_name: local-vault
+    hostname: vault
+    restart: unless-stopped
+    ports:
+      - "8200:8200"
+    cap_add:
+      - IPC_LOCK
+    environment:
+      VAULT_ADDR: 'http://0.0.0.0:8200'
+      VAULT_API_ADDR: 'http://0.0.0.0:8200'
+      # Config dosyası yerine JSON formatında ayarlar:
+      VAULT_LOCAL_CONFIG: '{"storage": {"file": {"path": "/vault/file"}}, "listener": {"tcp": {"address": "0.0.0.0:8200", "tls_disable": 1}}, "ui": true, "disable_mlock": true}'
+    
+    command: vault server -config=/vault/config/local.json
+    
+    volumes:
+      - vault_data:/vault/file
+
+volumes:
+  mssql_data:
+  mongo_data:
+  redis_data:
+  vault_data:
