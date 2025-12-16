@@ -14,6 +14,7 @@ import com.triobank.ledger.repository.LedgerEntryRepository;
 import com.triobank.ledger.repository.LedgerTransactionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -47,19 +48,33 @@ public class LedgerService {
         /**
          * Transaction Service'ten gelen "TransactionStarted" event'ini işler.
          * 
-         * Burada yapılanlar:
-         * 1. Transaction daha önce işlendi mi kontrol et (Idempotency)
-         * 2. Çift taraflı kayıt kuralını doğrula (Debit = Credit)
-         * 3. LedgerTransaction ve LedgerEntry'leri oluşturup kaydet
-         * 4. Bakiyeleri güvenli şekilde güncelle (Lock ile)
-         * 5. Başarılı olduysa "TransactionPosted" event'ini fırlat (SAGA devam etsin)
+         * SAGA Step 1: Kaydı oluştur ve bakiyeleri güncelle.
+         * Idempotency: Duplicate key (transactionId) gelirse
+         * DataIntegrityViolationException fırlatılır.
+         * Bunu yakalayıp graceful şekilde işlemeliyiz.
          */
         @Transactional
         public void recordTransaction(com.triobank.ledger.dto.event.incoming.TransactionStartedEvent.Payload request) {
                 log.info("Recording transaction: {}", request.getTransactionId());
 
-                checkTransactionNotExists(request.getTransactionId());
+                // 1. Idempotency Check (Fast Path - Memory/Cache check would be here)
+                if (transactionRepository.existsByTransactionId(request.getTransactionId())) {
+                        log.warn("Transaction already exists (Fast Check): {}", request.getTransactionId());
+                        return;
+                }
 
+                try {
+                        processTransactionRecord(request);
+                } catch (DataIntegrityViolationException e) {
+                        // 2. Race Condition / Constraint Violation Handling
+                        log.warn("Transaction already exists (Constraint Violation): {} - Idempotent success",
+                                        request.getTransactionId());
+                        // Ignore - ensures strict idempotency even under heavy load
+                }
+        }
+
+        private void processTransactionRecord(
+                        com.triobank.ledger.dto.event.incoming.TransactionStartedEvent.Payload request) {
                 // Map to ValidationEntry for validator
                 List<DoubleEntryValidator.ValidationEntry> validationEntries = request.getEntries().stream()
                                 .map(dto -> new DoubleEntryValidator.ValidationEntry(
@@ -75,7 +90,9 @@ public class LedgerService {
                 List<LedgerEntry> entries = createEntries(transaction, request);
                 entries.forEach(transaction::addEntry);
 
+                // This save might throw DataIntegrityViolationException if transactionId exists
                 transactionRepository.save(transaction);
+
                 List<BalanceUpdateDto> balanceUpdates = updateBalances(entries);
 
                 balanceUpdates.forEach(outboxService::publishBalanceUpdated);
@@ -83,7 +100,7 @@ public class LedgerService {
                 // Publish TransactionPostedEvent to Outbox (SAGA success)
                 outboxService.publishTransactionPosted(
                                 transaction.getTransactionId(),
-                                transaction.getTransactionType(), // It is already a String
+                                transaction.getTransactionType(),
                                 transaction.getTotalAmount(),
                                 transaction.getCurrency(),
                                 transaction.getPostingDate(),
@@ -94,11 +111,6 @@ public class LedgerService {
 
         /**
          * İşlem iptali (Reversal) - SAGA Compensation
-         * 
-         * Eğer bir transaction iptal edildiyse (yetersiz bakiye, hata vs),
-         * burada "Ters Kayıt" (Reversal Transaction) oluşturarak durumu düzeltiyoruz.
-         * 
-         * Asla silme (DELETE) yapmayız, her zaman ters kayıt atarız (Audit trail için).
          */
         @Transactional
         public void reverseTransaction(
@@ -144,6 +156,8 @@ public class LedgerService {
                                 transactionId, reversalTransaction.getTransactionId());
         }
 
+        // Checking not needed if we rely on DataIntegrityViolationException, but kept
+        // for logic separation if needed later
         private void checkTransactionNotExists(String transactionId) {
                 if (transactionRepository.existsByTransactionId(transactionId)) {
                         throw new TransactionAlreadyExistsException(transactionId);
@@ -240,10 +254,7 @@ public class LedgerService {
          * Hesap bakiyelerini günceller.
          * 
          * EN KRİTİK METOD BURASI.
-         * AccountBalanceRepository.findByAccountIdWithLock() kullanarak database
-         * seviyesinde
-         * row-lock alıyoruz. Böylece aynı anda iki işlem gelirse biri bekler,
-         * race condition oluşmaz ve bakiye tutarlı kalır.
+         * Pessimistic Locking ile row-lock alıyoruz.
          */
         private List<BalanceUpdateDto> updateBalances(List<LedgerEntry> entries) {
                 Map<String, BigDecimal> deltaMap = new HashMap<>();
@@ -275,6 +286,7 @@ public class LedgerService {
                                         .previousBalance(previousBalance)
                                         .newBalance(balance.getBalance())
                                         .delta(delta)
+                                        .currency(entries.get(0).getCurrency())
                                         .build());
 
                         log.debug("Balance updated: accountId={}, previous={}, new={}, delta={}",
@@ -293,21 +305,39 @@ public class LedgerService {
         }
 
         /**
-         * Transaction detaylarını getir (tüm entry'leri ile)
-         * 
-         * @param transactionId Transaction ID
-         * @return Transaction detayı
+         * Create initial balance for new account (0.00)
+         * Called when AccountCreatedEvent is received
          */
+        @Transactional
+        public void createInitialBalance(String accountId, String currency) {
+                log.info("Creating initial balance for account: {}, currency: {}", accountId, currency);
+
+                try {
+                        // Create balance with 0.00
+                        AccountBalance balance = AccountBalance.builder()
+                                        .accountId(accountId)
+                                        .currency(currency)
+                                        .balance(BigDecimal.ZERO)
+                                        .lastUpdatedAt(Instant.now())
+                                        .build();
+
+                        balanceRepository.saveAndFlush(balance); // Flush to trigger constraint violation immediately
+                        log.info("Initial balance created for account: {}", accountId);
+
+                } catch (DataIntegrityViolationException e) {
+                        log.warn("Balance already exists for account: {} (Idempotent success)", accountId);
+                        // Ignore - already exists, mission accomplished
+                }
+        }
+
         @Transactional(readOnly = true)
         public com.triobank.ledger.dto.response.TransactionDetailResponse getTransactionDetail(String transactionId) {
                 log.debug("Getting transaction detail for: {}", transactionId);
 
-                // Transaction'ı bul
                 LedgerTransaction transaction = transactionRepository
                                 .findByTransactionId(transactionId)
                                 .orElseThrow(() -> new TransactionNotFoundException(transactionId));
 
-                // Entry'leri map et
                 List<com.triobank.ledger.dto.response.TransactionDetailResponse.TransactionEntryDto> entryDtos = transaction
                                 .getEntries().stream()
                                 .map(entry -> com.triobank.ledger.dto.response.TransactionDetailResponse.TransactionEntryDto
@@ -322,7 +352,6 @@ public class LedgerService {
                                                 .build())
                                 .toList();
 
-                // Response oluştur
                 return com.triobank.ledger.dto.response.TransactionDetailResponse.builder()
                                 .transactionId(transaction.getTransactionId())
                                 .transactionType(transaction.getTransactionType())
@@ -337,60 +366,5 @@ public class LedgerService {
                                 .entries(entryDtos)
                                 .createdAt(transaction.getCreatedAt())
                                 .build();
-        }
-
-        /**
-         * Create initial balance for new account (0.00)
-         * Called when AccountCreatedEvent is received
-         */
-        @Transactional
-        public void createInitialBalance(String accountId, String currency) {
-                log.info("Creating initial balance for account: {}, currency: {}", accountId, currency);
-
-                // Check if balance already exists (idempotency)
-                if (balanceRepository.findByAccountId(accountId).isPresent()) {
-                        log.warn("Balance already exists for account: {}, skipping creation", accountId);
-                        return;
-                }
-
-                // Create balance with 0.00
-                AccountBalance balance = AccountBalance.builder()
-                                .accountId(accountId)
-                                .currency(currency)
-                                .balance(BigDecimal.ZERO)
-                                .lastUpdatedAt(Instant.now())
-                                .build();
-
-                balanceRepository.save(balance);
-
-                log.info("Initial balance created for account: {}", accountId);
-        }
-
-        /**
-         * Freeze balance for deleted account
-         * Called when AccountDeletedEvent is received
-         */
-        @Transactional
-        public void freezeBalance(String accountId) {
-                log.info("Freezing balance for deleted account: {}", accountId);
-
-                // Use pessimistic lock to prevent race conditions
-                AccountBalance balance = balanceRepository.findByAccountIdWithLock(accountId)
-                                .orElseThrow(() -> new IllegalStateException(
-                                                "Cannot freeze balance - account not found: " + accountId));
-
-                // Balance should be zero before deletion
-                if (balance.getBalance().compareTo(BigDecimal.ZERO) != 0) {
-                        log.error("CRITICAL: Attempting to freeze account with non-zero balance! accountId={}, balance={}",
-                                        accountId, balance.getBalance());
-                        throw new IllegalStateException("Cannot freeze account with non-zero balance: " + accountId);
-                }
-
-                // Mark as frozen (prevent future updates)
-                // In production, you might add a "frozen" flag to AccountBalance entity
-                log.info("Balance frozen for deleted account: {} (balance was {})", accountId,
-                                balance.getBalance());
-
-                // In production: balance.setFrozen(true); balanceRepository.save(balance);
         }
 }

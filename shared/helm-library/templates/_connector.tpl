@@ -68,7 +68,7 @@ metadata:
     {{- include "common.labels" . | nindent 4 }}
     app.kubernetes.io/component: cdc-connector
     triobank.com/source-service: {{ include "common.name" . }}
-    strimzi.io/cluster: triobank-connect
+    strimzi.io/cluster: connect
 spec:
   class: io.debezium.connector.sqlserver.SqlServerConnector
   tasksMax: 1

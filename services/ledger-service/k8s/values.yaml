@@ -5,7 +5,7 @@ commonAnnotations:
 replicaCount: 1
 
 image:
-  repository: triobank/ledger-service
+  repository: akyurekridvan2101/ledger-service
   pullPolicy: IfNotPresent
   tag: "latest"
 

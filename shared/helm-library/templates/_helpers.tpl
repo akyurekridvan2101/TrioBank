@@ -80,5 +80,5 @@ values.yaml'da kafka.brokers ile override edilebilir
 Default: triobank namespace'deki Kafka cluster
 */}}
 {{- define "common.kafka-bootstrap" -}}
-{{- default "triobank-cluster-kafka-bootstrap.triobank.svc.cluster.local:9092" .Values.kafka.brokers }}
+{{- default "kafka-kafka-bootstrap.triobank.svc.cluster.local:9092" .Values.kafka.brokers }}
 {{- end }}
