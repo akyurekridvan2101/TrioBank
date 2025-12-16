@@ -23,14 +23,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * BalanceService - Bakiye ve hesap ekstresi sorgulama servisi.
+ * Bakiye ve Ekstre Okuma Servisi
  * 
- * Burası tamamen Read-Only çalışır. Asla kayıt değiştirmez.
- * CQRS mantığında "Query" tarafı gibi düşünebiliriz.
+ * Burası sadece okuma yapar (Read-Only).
+ * Kayıt değiştirme yetkisi yoktur, o yüzden güvenle çağırabiliriz.
  * 
- * Veriyi hızlıca `AccountBalance` tablosundan okur ama gerekirse
- * `LedgerEntry` tablosundan baştan sona hesaplama yaparak (reconciliation)
- * doğrulama da yapabilir.
+ * Normalde bakiyeyi hızlıca `AccountBalance` tablosundan (cache gibi) okuruz.
+ * Ama işkillenirsek `LedgerEntry` tablosundan tek tek toplayarak
+ * (reconciliation)
+ * sağlamasını da yapabiliriz.
  */
 @Service
 @RequiredArgsConstructor

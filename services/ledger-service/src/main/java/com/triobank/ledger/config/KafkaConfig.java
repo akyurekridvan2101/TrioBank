@@ -19,8 +19,11 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * KafkaConfig - Kafka consumer configuration with separate factories per event
- * type
+ * Kafka Tüketici (Consumer) Ayarları
+ * 
+ * Burada her event tipi için ayrı birer listener factory tanımlıyoruz.
+ * Böylece tip güvenliğini garanti altına almış oluyoruz (CAST hatası olmaz).
+ * Ayrıca global hata yakalama (Error Handler) mekanizması da burada kurulu.
  */
 @Configuration
 @EnableKafka
@@ -54,32 +57,23 @@ public class KafkaConfig {
     }
 
     /**
-     * Global Error Handler
+     * Global Hata Yönetimi (Error Handler)
      * 
-     * Strategy:
-     * - Retry 3 times with 1 second interval
-     * - If still fails, log error (and potentially move to DLQ)
-     * 
-     * This protects against transient failures (e.g. DB connection lost)
+     * Veritabanı anlık gittiğinde veya ağ koptuğunda mesajı hemen kaybetmemek için
+     * 3 kere tekrar deniyoruz (1 saniye arayla).
+     * Eğer yine olmazsa logluyoruz (İleride Dead Letter Queue eklenebilir).
      */
     @Bean
     public org.springframework.kafka.listener.DefaultErrorHandler errorHandler() {
-        // BackOff: 1000ms (1s), 3 attempts
+        // 1 saniye bekle, 3 kere dene
         org.springframework.util.backoff.FixedBackOff backOff = new org.springframework.util.backoff.FixedBackOff(1000L,
                 3);
 
         org.springframework.kafka.listener.DefaultErrorHandler errorHandler = new org.springframework.kafka.listener.DefaultErrorHandler(
                 (record, exception) -> {
-                    // Recovery logic (after retries exhausted)
-                    // In production, sending to a Dead Letter Queue (DLQ) is best practice
-                    System.err.println("Failed to process record after 3 retries: " + record.value());
-                    // Here you could add logic to send to DLQ manually if needed
+                    // 3 denemeden sonra hala hata varsa buraya düşer.
+                    System.err.println("3 deneme başarısız, mesaj işlenemedi: " + record.value());
                 }, backOff);
-
-        // Exceptions that should NOT be retried (e.g. Deserialization errors, Invalid
-        // Data)
-        // errorHandler.addNotRetryableExceptions(IllegalArgumentException.class); //
-        // Example
 
         return errorHandler;
     }

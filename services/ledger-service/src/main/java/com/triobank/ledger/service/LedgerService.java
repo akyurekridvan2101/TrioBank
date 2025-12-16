@@ -24,15 +24,17 @@ import java.time.LocalDate;
 import java.util.*;
 
 /**
- * LedgerService - Muhasebe kayıtlarının (Defter-i Kebir) yönetildiği ana
- * servis.
+ * Ledger Service - Ana Muhasebe Servisi
  * 
- * Burası işin kalbi. Transaction Service'ten gelen işlem event'lerini alıp
- * burada muhasebeleştiriyoruz (LedgerEntry). Ayrıca bakiye güncellemeleri
- * ve SAGA pattern gereği gitmesi gereken cevaplar buradan yönetiliyor.
+ * Burası işin kalbi (Core Logic).
+ * Transaction Service'ten gelen olayları alıp deftere işliyoruz.
+ * Ayrıca SAGA pattern gereği "tamam", "iptal" gibi cevapları da buradan
+ * yönetiyoruz.
  * 
- * Concurrency kontrolü çok kritik olduğu için AccountBalance güncellemelerinde
- * Pessimistic Locking kullanıyoruz.
+ * En Kritik Nokta: Concurrency.
+ * Aynı hesaba aynı anda işlem gelirse bakiye patlamasın diye
+ * Pessimistic Lock (Row Lock) kullanıyoruz.
+ * "Önce kilitle, sonra güncelle."
  */
 @Service
 @RequiredArgsConstructor

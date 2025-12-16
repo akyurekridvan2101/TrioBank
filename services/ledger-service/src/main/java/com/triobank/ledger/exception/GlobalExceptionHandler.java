@@ -14,18 +14,15 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * GlobalExceptionHandler - Tüm exception'ları yakalar ve standart hata yanıtı
- * döner
+ * Global Hata Yakalayıcı (Exception Handler)
  * 
- * @RestControllerAdvice: Tüm controller'larda geçerli
+ * Uygulamanın neresinde bir hata patlarsa patlasın, burası yakalar.
+ * Böylece kullanıcıya saçma sapan stack trace dönmek yerine,
+ * "kardeş senin işlem olmadı çünkü şu yüzden" diye düzgün JSON dönüyoruz.
  */
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
-
-        // ========================================
-        // Ledger Specific Exceptions
-        // ========================================
 
         /**
          * Transaction zaten var (409 Conflict)
@@ -145,29 +142,17 @@ public class GlobalExceptionHandler {
         /**
          * Optimistic Locking Hatası (409 Conflict)
          * 
-         * CONCURRENCY SCENARIO:
-         * ---------------------
-         * Bu hata, aynı kaynağı (örn: AccountBalance) güncelleyen 2 concurrent
-         * transaction olduğunda atılır.
+         * AYNI ANDA (Concurrent) işlem yapmaya çalışan iki kişi çakışırsa bu hata
+         * fırlar.
          * 
-         * Örnek:
-         * - Transaction-1: AccountBalance version=5 okuyor
-         * - Transaction-2: AccountBalance version=5 okuyor
-         * - Transaction-1: version=6 olarak kaydediyor ✅
-         * - Transaction-2: version=5 ile kaydetmeye çalışıyor ❌ →
-         * OptimisticLockException
+         * Senaryo:
+         * 1. Ali ve Veli aynı anda hesabı okudu (Version: 5).
+         * 2. Ali parayı çekti ve kaydetti (Version: 6 oldu).
+         * 3. Veli de kaydetmeye çalıştı ama elindeki Version 5 artık eskidi!
+         * 4. Sistem: "Hop dedik, veri değişti, tekrar dene" der.
          * 
-         * NOT: Pessimistic locking uygulandıysa (Bug #1 fix) bu hata nadiren oluşur.
-         * Ancak savunma amaçlı bu handler eklenmiştir.
-         * 
-         * ÇÖZÜM:
-         * ------
-         * Client'a 409 Conflict döner ve transaction'ı retry etmesi önerilir.
-         * Retry'da güncel version'ı okuyacak ve başarılı olacaktır.
-         * 
-         * @param ex      OptimisticLockingFailureException
-         * @param request HTTP request
-         * @return 409 Conflict response
+         * Çözüm:
+         * Client'a 409 dönüyoruz. Client işlemi baştan (retry) yapmalı.
          */
         @ExceptionHandler(OptimisticLockingFailureException.class)
         public ResponseEntity<ErrorResponse> handleOptimisticLockingFailure(
@@ -199,10 +184,6 @@ public class GlobalExceptionHandler {
                 return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
         }
 
-        // ========================================
-        // Validation Errors (Bean Validation)
-        // ========================================
-
         /**
          * Bean validation hatası (@Valid)
          */
@@ -228,10 +209,6 @@ public class GlobalExceptionHandler {
 
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
         }
-
-        // ========================================
-        // Generic Exceptions
-        // ========================================
 
         /**
          * Genel Ledger exception (500 Internal Server Error)
