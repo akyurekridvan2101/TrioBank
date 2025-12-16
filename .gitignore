@@ -1,176 +1,220 @@
 # ====================================================================
 # TrioBank Platform - .gitignore
-# Mikroservis monorepo için profesyonel Git ignore yapılandırması
+# Professional Polyglot Microservices (Java + Go + Infra) Configuration
 # ====================================================================
 
 # --------------------------------------------------------------------
-# Go Language (Mikroservisler: auth-service, mail-service, vb.)
-# --------------------------------------------------------------------
-# Compiled binaries
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-/bin/
-/pkg/
-
-# Test binary, coverage files
-*.test
-*.out
-coverage.txt
-coverage.html
-
-# Go workspace files
-go.work
-go.work.sum
-
-# Vendor directory (dependency caching)
-vendor/
-
-# Air live reload (local development tool)
-tmp/
-.air.toml
-
-# --------------------------------------------------------------------
-# Java/Maven (Eğer gelecekte Java servisleri eklersek)
-# --------------------------------------------------------------------
-/target/
-/out/
-*.class
-dependency-reduced-pom.xml
-pom.xml.tag
-pom.xml.releaseBackup
-pom.xml.versionsBackup
-release.properties
-buildNumber.properties
-
-# --------------------------------------------------------------------
-# IDE ve Editor Dosyaları
-# --------------------------------------------------------------------
-# IntelliJ IDEA
-.idea/
-*.iws
-*.iml
-*.ipr
-
-# VS Code
-.vscode/
-*.code-workspace
-
-# Vim
-*.swp
-*.swo
-*~
-
-# --------------------------------------------------------------------
-# Kubernetes & Helm
-# --------------------------------------------------------------------
-# Helm dependency charts (node_modules gibi)
-charts/*.tgz
-**/charts/*.tgz
-
-# Helm values with secrets (production overrides)
-values-secret.yaml
-*-secrets.yaml
-
-# Kustomize generated files
-kustomization-generated.yaml
-
-# --------------------------------------------------------------------
-# Terraform (Infrastructure as Code)
-# --------------------------------------------------------------------
-.terraform/
-*.tfstate
-*.tfstate.*
-*.tfstate.backup
-*.tfvars           #민감한 değişkenler (DB passwords, API keys)
-.terraform.lock.hcl
-tfplan
-tfplan.json
-crash.log
-override.tf
-override.tf.json
-
-# --------------------------------------------------------------------
-# Docker & Container Images
-# --------------------------------------------------------------------
-# Local docker-compose overrides
-docker-compose.override.yml
-
-# Dockerfile build cache
-.dockerignore.local
-
-# --------------------------------------------------------------------
-# Environment Variables & Secrets (KRİTİK!)
-# --------------------------------------------------------------------
-.env
-.env.*
-!.env.example      # Example files are OK
-*.env
-
-# Secret files
-*.key
-*.pem
-*.cert
-*.crt
-*.p12
-*.jks
-kubeconfig
-kubeconfig.*
-
-# Vault unseal keys (eğer local'de test ediliyorsa)
-vault-keys.txt
-unseal-keys.json
-
-# ArgoCD local manifests (generated)
-argocd-generated/
-
-# --------------------------------------------------------------------
-# Database & Data Files
-# --------------------------------------------------------------------
-# Local SQL dumps
-*.sql
-*.dump
-*.db
-*.sqlite
-*.sqlite3
-
-# MongoDB local data
-data/db/
-
-# --------------------------------------------------------------------
-# OS Specific Files
+# 1. GLOBAL & OS SPECIFIC (All OS junk)
 # --------------------------------------------------------------------
 # macOS
 .DS_Store
 .AppleDouble
 .LSOverride
 ._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
 
 # Windows
 Thumbs.db
+Thumbnails
 ehthumbs.db
 Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msm
+*.msp
+*.lnk
 
 # Linux
 .directory
-.Trash-*
+*~
+.fuse_hidden*
+.trash-*
+.nfs*
 
 # --------------------------------------------------------------------
-# Temporary & Cache Files
+# 2. IDE & EDITOR FILES (Don't commit your settings)
 # --------------------------------------------------------------------
+# IntelliJ IDEA
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
+
+# VS Code
+.vscode/
+*.code-workspace
+.history/
+
+# Eclipse
+.metadata
+.classpath
+.project
+.settings/
+.loadpath
+bin/
+
+# NetBeans
+nbproject/private/
+build/
+nbbuild/
+dist/
+nbdist/
+.nb-gradle/
+
+# Generic
+*.swp
+*.swo
+*~
+*.log
+
+# --------------------------------------------------------------------
+# 3. JAVA & MAVEN (Ledger Service)
+# --------------------------------------------------------------------
+target/
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+hs_err_pid*
+replay_pid*
+
+# Maven wrapper (optional: usually good to commit, but hiding specific ones)
+!.mvn/wrapper/maven-wrapper.jar
+
+# Maven release plugin
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.properties
+
+# --------------------------------------------------------------------
+# 4. GO LANGUAGE (Auth & Mail Services)
+# --------------------------------------------------------------------
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Output directories (common conventions)
+/bin/
+/dist/
+/pkg/
+
+# Test coverage
+coverage.txt
+coverage.html
+cover.out
+
+# Go workspace
+go.work
+go.work.sum
+
+# Vendor (check your policy - if you use modules, usually ignore vendor)
+vendor/
+
+# Tools
+.air.toml
+debug/
+
+# --------------------------------------------------------------------
+# 5. INFRASTRUCTURE (Terraform, K8s, Docker)
+# --------------------------------------------------------------------
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+*.tfvars
+*.tfvars.json
+.terraform.lock.hcl
+.terraform.rc
+tfplan
+tfplan.json
+crash.log
+override.tf
+override.tf.json
+
+# Kubernetes & Helm
+charts/*.tgz
+**/charts/*.tgz
+values-secret.yaml
+*-secrets.yaml
+debug-k8s.yaml
+kustomization-generated.yaml
+kubeconfig
+.kube/
+
+# Docker
+.dockerignore.local
+docker-compose.override.yml
+*.tar      # Docker images
+
+# --------------------------------------------------------------------
+# 6. SECRETS & ENVIRONMENT (CRITICAL: NEVER COMMIT THESE)
+# --------------------------------------------------------------------
+# Environment variables
+.env
+.env.*
+!.env.example
+*.env
+
+# Keys and Certificates
+*.key
+*.pem
+*.cert
+*.crt
+*.p12
+*.jks
+*.keystore
+*.pfx
+*.asc
+*.gpg
+
+# Vault / Secret Managers
+.vault-token
+vault-keys.txt
+unseal-keys.json
+
+# Postgres/SQL Dumps
+*.sql
+*.dump
+*.db
+*.sqlite
+data/db/
+
+# --------------------------------------------------------------------
+# 7. LOGS & TEMP FILES
+# --------------------------------------------------------------------
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs/
+temp/
+tmp/
 *.tmp
 *.temp
-*.cache
-.cache/
-node_modules/      # Eğer frontend tooling eklersek
-.npm/
-
-# --------------------------------------------------------------------
-# Backup Files
-# --------------------------------------------------------------------
 *.bak
 *.backup
-*~.nib
+*.old
 *.orig

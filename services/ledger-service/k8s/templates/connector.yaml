@@ -1,0 +1,3 @@
+{{- if .Values.connector.enabled }}
+{{ include "common.connector" . }}
+{{- end }}
