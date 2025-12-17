@@ -60,8 +60,8 @@ public class KafkaConfig {
      * Global Hata Yönetimi (Error Handler)
      * 
      * Veritabanı anlık gittiğinde veya ağ koptuğunda mesajı hemen kaybetmemek için
-     * 3 kere tekrar deniyoruz.
-     * Eğer yine olmazsa logluyoruz.
+     * 3 kere tekrar deniyoruz (1 saniye arayla).
+     * Eğer yine olmazsa logluyoruz (İleride Dead Letter Queue eklenebilir).
      */
     @Bean
     public org.springframework.kafka.listener.DefaultErrorHandler errorHandler() {
