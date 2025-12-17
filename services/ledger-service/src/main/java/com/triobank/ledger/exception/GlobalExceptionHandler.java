@@ -232,6 +232,28 @@ public class GlobalExceptionHandler {
         }
 
         /**
+         * Static resource bulunamadı (404) - Spring Boot 3 favicon.ico vb.
+         */
+        @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
+        public ResponseEntity<ErrorResponse> handleNoResourceFoundException(
+                        org.springframework.web.servlet.resource.NoResourceFoundException ex,
+                        HttpServletRequest request) {
+
+                // Info level yeterli, error değil
+                log.info("Resource not found: {}", ex.getResourcePath());
+
+                ErrorResponse error = ErrorResponse.builder()
+                                .status(HttpStatus.NOT_FOUND.value())
+                                .error(HttpStatus.NOT_FOUND.getReasonPhrase())
+                                .code("LE-404-RESOURCE")
+                                .message("Resource not found: " + ex.getResourcePath())
+                                .path(request.getRequestURI())
+                                .build();
+
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+        }
+
+        /**
          * Beklenmedik hata (500 Internal Server Error)
          */
         @ExceptionHandler(Exception.class)

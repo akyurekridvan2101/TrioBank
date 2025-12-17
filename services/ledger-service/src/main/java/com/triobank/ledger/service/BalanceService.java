@@ -59,9 +59,7 @@ public class BalanceService {
                                 .accountId(balance.getAccountId())
                                 .balance(balance.getBalance())
                                 .currency(balance.getCurrency())
-                                .lastEntryId(balance.getLastEntryId() != null
-                                                ? ((java.util.UUID) balance.getLastEntryId()).getMostSignificantBits()
-                                                : null)
+                                .lastEntryId(balance.getLastEntryId())
                                 .lastUpdatedAt(balance.getLastUpdatedAt())
                                 .version(balance.getVersion() != null ? balance.getVersion().intValue() : null)
                                 .build();
@@ -101,6 +99,7 @@ public class BalanceService {
          * @param startDate             Başlangıç tarihi (opsiyonel)
          * @param endDate               Bitiş tarihi (opsiyonel)
          * @param entryType             Sadece borçlar veya alacaklar (opsiyonel)
+         * @param type                  Sadece borçlar veya alacaklar (opsiyonel)
          * @param includeRunningBalance Yürüyen bakiye olsun mu? (Performans için
          *                              kapatılabilir)
          * @param pageable              Sayfalama
@@ -110,16 +109,22 @@ public class BalanceService {
                         String accountId,
                         LocalDate startDate,
                         LocalDate endDate,
-                        EntryType entryType,
+                        EntryType type,
+                        String keyword, // Yeni parametre
                         boolean includeRunningBalance,
                         Pageable pageable) {
 
-                log.debug("Getting statement for account: {}, startDate: {}, endDate: {}, type: {}, includeBalance: {}",
-                                accountId, startDate, endDate, entryType, includeRunningBalance);
+                log.debug("Getting statement for account: {}, startDate: {}, endDate: {}, type: {}, keyword: {}, includeBalance: {}",
+                                accountId, startDate, endDate, type, keyword, includeRunningBalance);
 
-                // Entry'leri çek (filtrelenmiş ve sayfalanmış)
-                Page<LedgerEntry> entriesPage = getFilteredEntries(
-                                accountId, startDate, endDate, entryType, pageable);
+                // Tek bir query ile hepsini çözüyoruz
+                Page<LedgerEntry> entriesPage = entryRepository.searchByCriteria(
+                                accountId,
+                                startDate,
+                                endDate,
+                                type,
+                                keyword,
+                                pageable);
 
                 // Currency bilgisi AccountBalance'tan al (doğru kaynak)
                 String currency = "TRY"; // Default fallback
@@ -162,36 +167,6 @@ public class BalanceService {
         /**
          * Filtrelenmiş entry'leri getir
          */
-        private Page<LedgerEntry> getFilteredEntries(
-                        String accountId,
-                        LocalDate startDate,
-                        LocalDate endDate,
-                        EntryType entryType,
-                        Pageable pageable) {
-
-                // Tarih ve tip filtresi yoksa
-                if (startDate == null && endDate == null && entryType == null) {
-                        return entryRepository.findByAccountId(accountId, pageable);
-                }
-
-                // Tarih filtresi varsa (tek tarih de destekle!)
-                if (startDate != null || endDate != null) {
-                        // Eksik tarihleri tamamla
-                        LocalDate effectiveStart = startDate != null ? startDate : LocalDate.of(1970, 1, 1);
-                        LocalDate effectiveEnd = endDate != null ? endDate : LocalDate.now();
-
-                        return entryRepository.findByAccountIdAndPostingDateBetween(
-                                        accountId, effectiveStart, effectiveEnd, pageable);
-                }
-
-                // Sadece tip filtresi varsa
-                if (entryType != null) {
-                        return entryRepository.findByAccountIdAndEntryType(accountId, entryType, pageable);
-                }
-
-                // Default: tüm entry'ler
-                return entryRepository.findByAccountId(accountId, pageable);
-        }
 
         /**
          * Running balance ile entry'leri oluştur (OPTIMIZED)
@@ -257,9 +232,10 @@ public class BalanceService {
                         BigDecimal runningBalance) {
 
                 return StatementEntryResponse.builder()
-                                .entryId(((java.util.UUID) entry.getId()).getMostSignificantBits())
+                                .entryId((java.util.UUID) entry.getId())
                                 .transactionId(entry.getTransaction().getTransactionId())
                                 .date(entry.getPostingDate())
+                                .transactionTime(entry.getCreatedAt())
                                 .entryType(entry.getEntryType().name())
                                 .amount(entry.getAmount())
                                 .runningBalance(runningBalance)
