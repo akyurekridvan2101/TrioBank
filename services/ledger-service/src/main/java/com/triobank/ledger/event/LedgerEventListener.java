@@ -15,9 +15,12 @@ import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
 
 /**
- * Kafka event listener for Ledger Service
+ * Kafka Event Dinleyicisi (Listener)
  * 
- * Listens to incoming events and delegates to LedgerService
+ * Transaction ve Account servislerinden gelen Kafka mesajlarını (event'leri)
+ * burada karşılıyoruz ve LedgerService'e (iş mantığına) yönlendiriyoruz.
+ * Hata yönetimi (Retry) KafkaConfig tarafında yapılıyor, burası sadece
+ * yönlendirici.
  */
 @Component
 @RequiredArgsConstructor
@@ -27,9 +30,9 @@ public class LedgerEventListener {
         private final LedgerService ledgerService;
 
         /**
-         * Transaction started - Record to ledger (SAGA)
+         * Transaction Başladı (SAGA Adım 1)
          * 
-         * Topic: triobank.{env}.transaction.TransactionStarted.v1
+         * Kullanıcı bir işlem başlattı, hemen deftere kaydediyoruz.
          */
         @KafkaListener(topics = "${ledger.kafka.consumer.topics.transaction-started}", groupId = "${spring.kafka.consumer.group-id}", containerFactory = "transactionStartedListenerFactory")
         public void handleTransactionStarted(
@@ -38,42 +41,43 @@ public class LedgerEventListener {
                         @Header(KafkaHeaders.OFFSET) Long offset,
                         Acknowledgment acknowledgment) {
 
-                log.info("Received TransactionStarted event: transactionId={}, topic={}, offset={}",
+                log.info("TransactionStarted eventi geldi: id={}, topic={}, offset={}",
                                 event.getPayload().getTransactionId(), topic, offset);
 
-                // Direkt event'i service'e gönder - Exception fırlarsa ErrorHandler yakalar ve
-                // retry eder
+                // Hata olursa exception fırlar, ErrorHandler yakalayıp retry eder.
                 ledgerService.recordTransaction(event.getPayload());
 
-                // Başarılı olursa ACK
+                // Sorun yoksa Kafka'ya "tamamdır" diyoruz
                 acknowledgment.acknowledge();
 
-                log.info("Transaction recorded successfully: {}", event.getPayload().getTransactionId());
+                log.info("Transaction başarıyla kaydedildi: {}", event.getPayload().getTransactionId());
         }
 
         /**
-         * Compensation required - Reversal (SAGA failed)
+         * İşlem İptali / İade (Compensation)
          * 
-         * Topic: triobank.{env}.transaction.CompensationRequired.v1
+         * Transaction bir yerde patladıysa (örn. bakiye yetmedi),
+         * SAGA gereği işlemi geri alıyoruz (Ters kayıt atıyoruz).
          */
         @KafkaListener(topics = "${ledger.kafka.consumer.topics.compensation-required}", groupId = "${spring.kafka.consumer.group-id}", containerFactory = "compensationRequiredListenerFactory")
         public void onCompensationRequired(
                         @Payload CompensationRequiredEvent event,
                         Acknowledgment acknowledgment) {
 
-                log.info("Received CompensationRequiredEvent: {}", event.getPayload().getTransactionId());
+                log.info("Compensation (İade) talebi geldi: transactionId={}", event.getPayload().getTransactionId());
 
                 ledgerService.reverseTransaction(event.getPayload());
 
                 acknowledgment.acknowledge();
 
-                log.info("Compensation processed successfully: {}", event.getPayload().getTransactionId());
+                log.info("İade işlemi tamamlandı: {}", event.getPayload().getTransactionId());
         }
 
         /**
-         * Account created - Create initial balance
+         * Yeni Hesap Açıldı
          * 
-         * Topic: triobank.{env}.account.AccountCreated.v1
+         * Account Service hesap açtı, biz de hemen 0.00 bakiyeli bir kayıt
+         * oluşturuyoruz.
          */
         @KafkaListener(topics = "${ledger.kafka.consumer.topics.account-created}", groupId = "${spring.kafka.consumer.group-id}", containerFactory = "accountCreatedListenerFactory")
         public void handleAccountCreated(
@@ -82,19 +86,15 @@ public class LedgerEventListener {
                         @Header(KafkaHeaders.OFFSET) Long offset,
                         Acknowledgment acknowledgment) {
 
-                log.info("Received AccountCreated event: accountId={}, accountNumber={}, topic={}, offset={}",
-                                event.getPayload().getAccountId(), event.getPayload().getAccountNumber(), topic,
-                                offset);
+                log.info("AccountCreated eventi geldi: accountId={}", event.getPayload().getAccountId());
 
-                // Create initial balance (0.00)
                 ledgerService.createInitialBalance(
                                 event.getPayload().getAccountId(),
                                 event.getPayload().getCurrency());
 
-                // ACK
                 acknowledgment.acknowledge();
 
-                log.info("Initial balance created for account: {}", event.getPayload().getAccountId());
+                log.info("Hesap için başlangıç bakiyesi oluşturuldu: {}", event.getPayload().getAccountId());
         }
 
 }

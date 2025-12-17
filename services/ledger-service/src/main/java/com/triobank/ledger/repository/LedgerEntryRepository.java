@@ -22,10 +22,6 @@ import java.util.UUID;
 @Repository
 public interface LedgerEntryRepository extends JpaRepository<LedgerEntry, UUID> {
 
-        // ========================================
-        // Transaction Queries
-        // ========================================
-
         /**
          * Bir transaction'ın tüm entry'lerini bul (sequence sırasına göre)
          * 
@@ -36,10 +32,6 @@ public interface LedgerEntryRepository extends JpaRepository<LedgerEntry, UUID> 
                         "WHERE e.transaction.transactionId = :transactionId " +
                         "ORDER BY e.sequence ASC")
         List<LedgerEntry> findByTransactionIdOrderBySequence(@Param("transactionId") String transactionId);
-
-        // ========================================
-        // Account Queries (Pagination)
-        // ========================================
 
         /**
          * Bir hesabın tüm entry'lerini bul (sayfalama ile)
@@ -81,14 +73,23 @@ public interface LedgerEntryRepository extends JpaRepository<LedgerEntry, UUID> 
          * @param pageable  Sayfalama
          * @return Entry sayfası
          */
-        Page<LedgerEntry> findByAccountIdAndEntryType(
-                        String accountId,
-                        EntryType entryType,
-                        Pageable pageable);
 
-        // ========================================
-        // Balance Calculation (ÇOK ÖNEMLİ!)
-        // ========================================
+        /**
+         * Çok kriterli arama metodu (Keyword dahil)
+         */
+        @Query("SELECT e FROM LedgerEntry e " +
+                        "WHERE e.accountId = :accountId " +
+                        "AND (:startDate IS NULL OR e.postingDate >= :startDate) " +
+                        "AND (:endDate IS NULL OR e.postingDate <= :endDate) " +
+                        "AND (:entryType IS NULL OR e.entryType = :entryType) " +
+                        "AND (:keyword IS NULL OR LOWER(e.description) LIKE LOWER(CONCAT('%', :keyword, '%')))")
+        Page<LedgerEntry> searchByCriteria(
+                        @Param("accountId") String accountId,
+                        @Param("startDate") LocalDate startDate,
+                        @Param("endDate") LocalDate endDate,
+                        @Param("entryType") EntryType entryType,
+                        @Param("keyword") String keyword,
+                        Pageable pageable);
 
         /**
          * Bir hesabın bakiyesini hesapla (CREDIT - DEBIT)
@@ -128,10 +129,6 @@ public interface LedgerEntryRepository extends JpaRepository<LedgerEntry, UUID> 
         BigDecimal calculateBalanceUpToDate(
                         @Param("accountId") String accountId,
                         @Param("upToDate") LocalDate upToDate);
-
-        // ========================================
-        // Statistics Queries
-        // ========================================
 
         /**
          * Bir hesapta toplam kaç adet hareket olduğunu döner.

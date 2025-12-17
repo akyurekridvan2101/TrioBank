@@ -32,7 +32,7 @@ public class AccountBalanceResponse {
     private Instant lastUpdatedAt;
 
     /** Son işlenen entry ID */
-    private Long lastEntryId;
+    private java.util.UUID lastEntryId;
 
     /** Optimistic lock versiyonu */
     private Integer version;

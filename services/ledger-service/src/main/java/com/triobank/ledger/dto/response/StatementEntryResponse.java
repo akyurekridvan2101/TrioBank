@@ -20,13 +20,16 @@ import java.time.LocalDate;
 public class StatementEntryResponse {
 
     /** Entry ID */
-    private Long entryId;
+    private java.util.UUID entryId;
 
     /** Transaction ID */
     private String transactionId;
 
     /** Entry tarihi */
     private LocalDate date;
+
+    /** İşlem saati (UI gösterimi için) */
+    private java.time.Instant transactionTime;
 
     /** Entry tipi (DEBIT, CREDIT) */
     private String entryType;

@@ -7,7 +7,6 @@ import com.triobank.ledger.domain.model.LedgerTransaction;
 import com.triobank.ledger.domain.model.TransactionStatus;
 import com.triobank.ledger.domain.service.DoubleEntryValidator;
 import com.triobank.ledger.dto.response.BalanceUpdateDto;
-import com.triobank.ledger.exception.TransactionAlreadyExistsException;
 import com.triobank.ledger.exception.TransactionNotFoundException;
 import com.triobank.ledger.repository.AccountBalanceRepository;
 import com.triobank.ledger.repository.LedgerEntryRepository;
@@ -24,15 +23,17 @@ import java.time.LocalDate;
 import java.util.*;
 
 /**
- * LedgerService - Muhasebe kayıtlarının (Defter-i Kebir) yönetildiği ana
- * servis.
+ * Ledger Service - Ana Muhasebe Servisi
  * 
- * Burası işin kalbi. Transaction Service'ten gelen işlem event'lerini alıp
- * burada muhasebeleştiriyoruz (LedgerEntry). Ayrıca bakiye güncellemeleri
- * ve SAGA pattern gereği gitmesi gereken cevaplar buradan yönetiliyor.
+ * Burası işin kalbi (Core Logic).
+ * Transaction Service'ten gelen olayları alıp deftere işliyoruz.
+ * Ayrıca SAGA pattern gereği "tamam", "iptal" gibi cevapları da buradan
+ * yönetiyoruz.
  * 
- * Concurrency kontrolü çok kritik olduğu için AccountBalance güncellemelerinde
- * Pessimistic Locking kullanıyoruz.
+ * En Kritik Nokta: Concurrency.
+ * Aynı hesaba aynı anda işlem gelirse bakiye patlamasın diye
+ * Pessimistic Lock (Row Lock) kullanıyoruz.
+ * "Önce kilitle, sonra güncelle."
  */
 @Service
 @RequiredArgsConstructor
@@ -57,7 +58,6 @@ public class LedgerService {
         public void recordTransaction(com.triobank.ledger.dto.event.incoming.TransactionStartedEvent.Payload request) {
                 log.info("Recording transaction: {}", request.getTransactionId());
 
-                // 1. Idempotency Check (Fast Path - Memory/Cache check would be here)
                 if (transactionRepository.existsByTransactionId(request.getTransactionId())) {
                         log.warn("Transaction already exists (Fast Check): {}", request.getTransactionId());
                         return;
@@ -66,16 +66,14 @@ public class LedgerService {
                 try {
                         processTransactionRecord(request);
                 } catch (DataIntegrityViolationException e) {
-                        // 2. Race Condition / Constraint Violation Handling
                         log.warn("Transaction already exists (Constraint Violation): {} - Idempotent success",
                                         request.getTransactionId());
-                        // Ignore - ensures strict idempotency even under heavy load
                 }
         }
 
         private void processTransactionRecord(
                         com.triobank.ledger.dto.event.incoming.TransactionStartedEvent.Payload request) {
-                // Map to ValidationEntry for validator
+
                 List<DoubleEntryValidator.ValidationEntry> validationEntries = request.getEntries().stream()
                                 .map(dto -> new DoubleEntryValidator.ValidationEntry(
                                                 dto.getSequence(),
@@ -90,14 +88,12 @@ public class LedgerService {
                 List<LedgerEntry> entries = createEntries(transaction, request);
                 entries.forEach(transaction::addEntry);
 
-                // This save might throw DataIntegrityViolationException if transactionId exists
                 transactionRepository.save(transaction);
 
                 List<BalanceUpdateDto> balanceUpdates = updateBalances(entries);
 
                 balanceUpdates.forEach(outboxService::publishBalanceUpdated);
 
-                // Publish TransactionPostedEvent to Outbox (SAGA success)
                 outboxService.publishTransactionPosted(
                                 transaction.getTransactionId(),
                                 transaction.getTransactionType(),
@@ -154,14 +150,6 @@ public class LedgerService {
 
                 log.info("Transaction reversed successfully: {} -> {}",
                                 transactionId, reversalTransaction.getTransactionId());
-        }
-
-        // Checking not needed if we rely on DataIntegrityViolationException, but kept
-        // for logic separation if needed later
-        private void checkTransactionNotExists(String transactionId) {
-                if (transactionRepository.existsByTransactionId(transactionId)) {
-                        throw new TransactionAlreadyExistsException(transactionId);
-                }
         }
 
         private LedgerTransaction createTransaction(

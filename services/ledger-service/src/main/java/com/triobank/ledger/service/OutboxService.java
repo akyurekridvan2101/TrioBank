@@ -12,16 +12,15 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * OutboxService - "Transactional Outbox Pattern" implementasyonu.
+ * Outbox Service - Transactional Outbox Deseni
  * 
- * Burası dağıtık sistemlerde veri tutarlılığı için hayati önem taşır.
- * Kafka'ya direkt event atmak yerine, önce veritabanındaki `outbox_events`
- * tablosuna
- * yazıyoruz. Bu yazma işlemi, business transaction (örn: para transferi) ile
- * AYNI transaction içinde gerçekleşiyor (Atomicity).
+ * Dağıtık sistemlerin olmazsa olmazı.
+ * Kafka'ya doğrudan mesaj atarsak ve o an ağ koparsa, veri tutarsızlığı olur.
+ * O yüzden önce veritabanındaki 'outbox_events' tablosuna yazıyoruz (Commit
+ * garantili).
+ * Sonra Debezium (CDC) aracı bu tablodan okuyup Kafka'ya basıyor.
  * 
- * Daha sonra Debezium (CDC) bu tablodaki kayıtları okuyup Kafka'ya basacak.
- * Böylece "Database'e yazdım ama Kafka tpatladı" durumu asla yaşanmaz.
+ * Özetle: "Database'e yazdım ama Kafka'ya gidemedim" derdine son.
  */
 @Service
 @RequiredArgsConstructor

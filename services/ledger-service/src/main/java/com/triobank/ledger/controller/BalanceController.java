@@ -77,13 +77,14 @@ public class BalanceController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
             @RequestParam(required = false) EntryType type,
+            @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "true") boolean includeRunningBalance,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
 
         log.info(
-                "Getting statement for account: {}, startDate: {}, endDate: {}, type: {}, includeBalance: {}, page: {}, size: {}",
-                accountId, startDate, endDate, type, includeRunningBalance, page, size);
+                "Getting statement for account: {}, startDate: {}, endDate: {}, type: {}, keyword: {}, includeBalance: {}, page: {}, size: {}",
+                accountId, startDate, endDate, type, keyword, includeRunningBalance, page, size);
 
         // En yeni işlemler en üstte olsun (DESC)
         Pageable pageable = PageRequest.of(page, size, Sort.by("postingDate").descending());
@@ -93,6 +94,7 @@ public class BalanceController {
                 startDate,
                 endDate,
                 type,
+                keyword,
                 includeRunningBalance,
                 pageable);
 
@@ -100,7 +102,7 @@ public class BalanceController {
     }
 
     /**
-     * [ADMIN & DEBUG] Bakiye hesaplama (Re-calculation).
+     * Bakiye hesaplama (Re-calculation).
      * 
      * DİKKAT: Bu metod cache'i atlayıp, tüm transactionları baştan sona toplayarak
      * hesaplama yapar. Database'i yorabilir, sadece tutarsızlık şüphesi varsa
@@ -139,7 +141,7 @@ public class BalanceController {
     }
 
     /**
-     * [ADMIN & DEBUG] Bakiye Mutabakatı (Reconciliation).
+     * Bakiye Mutabakatı (Reconciliation).
      * 
      * Cache'deki bakiye ile, entry'lerden hesaplanan bakiye tutuyor mu?
      * Periyodik kontrollerde çağrılabilir.
