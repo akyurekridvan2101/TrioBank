@@ -1,0 +1,14 @@
+# Kafka Connect - Production Environment
+# CDC connector'ları için production kaynak limitleri ve JVM ayarları
+
+resources:
+  requests:
+    memory: 2Gi      # Production için artırıldı (dev: 512Mi)
+    cpu: 1000m       # Production için artırıldı (dev: 200m)
+  limits:
+    memory: 4Gi      # Production için artırıldı (dev: 1Gi)
+    cpu: 2000m       # Production için artırıldı (dev: 500m)
+
+jvmOptions:
+  -Xms: 1g           # Production için artırıldı (dev: 256m)
+  -Xmx: 2g           # Production için artırıldı (dev: 512m)

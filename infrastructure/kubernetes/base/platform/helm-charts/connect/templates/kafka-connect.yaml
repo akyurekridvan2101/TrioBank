@@ -34,15 +34,23 @@ spec:
   config:
     {{- toYaml .Values.config | nindent 4 }}
   
-  # Harici secret'lar - Veritabanı kimlik bilgileri
-  {{- if .Values.externalConfiguration }}
-  externalConfiguration:
-    volumes:
-      {{- range .Values.externalConfiguration.secretsToMount }}
-      - name: {{ .name }}
-        secret:
-          secretName: {{ .secretName }}
-      {{- end }}
+  # Pod template for volumes and volume mounts (replaces deprecated externalConfiguration)
+  {{- if .Values.secretsToMount }}
+  template:
+    pod:
+      volumes:
+        {{- range .Values.secretsToMount }}
+        - name: {{ .name }}
+          secret:
+            secretName: {{ .secretName }}
+        {{- end }}
+    connectContainer:
+      volumeMounts:
+        {{- range .Values.secretsToMount }}
+        - name: {{ .name }}
+          mountPath: {{ .mountPath }}
+          readOnly: true
+        {{- end }}
   {{- end }}
 {{- end }}
 

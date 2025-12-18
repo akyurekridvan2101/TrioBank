@@ -1,0 +1,11 @@
+# Kafka Operator (Strimzi) - Production Environment
+# Kafka CRD yönetimi için production kaynak limitleri
+
+strimzi-kafka-operator:
+  resources:
+    requests:
+      cpu: 500m        # Production için artırıldı (dev: 100m)
+      memory: 1Gi      # Production için artırıldı (dev: 512Mi)
+    limits:
+      cpu: 2000m       # Production için artırıldı (dev: 500m)
+      memory: 2Gi      # Production için artırıldı (dev: 1024Mi)

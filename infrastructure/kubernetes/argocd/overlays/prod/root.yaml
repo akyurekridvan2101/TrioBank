@@ -19,14 +19,14 @@ spec:
   # Git source - Apps Helm chart'ını point ediyor
   source:
     repoURL: https://github.com/TrioBank/triobank.git
-    targetRevision: main  # Production branch (main)
+    targetRevision: feature/account-service  # Production branch (feature/account-service)
     path: infrastructure/kubernetes/argocd/apps        # Apps chart path
     
     # Helm values - Apps chart'a geçirilen parametreler
     helm:
       values: |
         env: prod                      # Environment = PRODUCTION
-        branch: main                   # Git branch for child apps (production stable)
+        branch: feature/account-service # Git branch for child apps
 
   # Deployment destination
   destination:
