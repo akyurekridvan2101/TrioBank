@@ -1,0 +1,11 @@
+apiVersion: v2
+name: client-service
+description: Client Service - Customer Data Management
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+
+dependencies:
+  - name: common
+    version: "0.1.1"
+    repository: "file://../../../shared/helm-library"
