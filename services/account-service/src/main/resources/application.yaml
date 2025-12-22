@@ -1,0 +1,97 @@
+spring:
+  application:
+    name: account-service
+  
+  datasource:
+    url: jdbc:sqlserver://localhost:1433;databaseName=account_db;encrypt=false;trustServerCertificate=true
+    username: ${DB_USERNAME:sa}
+    password: ${DB_PASSWORD:TrioBank123}
+    driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
+  
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.SQLServerDialect
+        jdbc:
+          time_zone: UTC
+  
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: account-service
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: com.triobank.*
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+  
+# Kafka Integration Control
+# false yaparsanız Kafka olmadan çalışır (broker yoksa bunu kullanın)
+kafka:
+  enabled: ${KAFKA_ENABLED:false}
+
+server:
+  port: ${SERVER_PORT:8081}
+  error:
+    include-message: always
+    include-binding-errors: always
+
+# Logging
+logging:
+  level:
+    com.triobank.account: DEBUG
+    org.springframework.kafka: INFO
+    org.hibernate.SQL: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# Actuator
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+# OpenAPI/Swagger
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+  info:
+    title: Account Service API
+    description: TrioBank Account Service
+    version: 1.0.0
+
+# Global App Settings
+app:
+  env: ${APP_ENV:local}
+  kafka:
+    topic:
+      version: v1
+  
+  # Outbox Pattern Config
+  outbox:
+    enabled: true
+    table-name: outbox_events
+
+# Service Specific Configs
+account:
+  kafka:
+    consumer:
+      topics:
+        # Ledger Service Events
+        ledger-account-creation-failed: ledger.AccountCreationFailed.${app.kafka.topic.version}
+        balance-updated: ledger.BalanceUpdated.${app.kafka.topic.version}
