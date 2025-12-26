@@ -1,0 +1,134 @@
+spring:
+  application:
+    name: transaction-service
+  
+  datasource:
+    url: jdbc:sqlserver://localhost:1433;databaseName=transaction_db;encrypt=false;trustServerCertificate=true
+    username: ${DB_USERNAME:sa}
+    password: ${DB_PASSWORD:TrioBank123}
+    driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
+  
+  jpa:
+    hibernate:
+      ddl-auto: none  # Migration dosyaları ile yönetiyoruz
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.SQLServerDialect
+        jdbc:
+          time_zone: UTC
+  
+  # Kafka Consumer (Ledger Service events)
+  # Event publishing: Debezium CDC (outbox_events -> Kafka)
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: transaction-service
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: com.triobank.*
+      auto-offset-reset: earliest
+      enable-auto-commit: false  # Manual commit (güvenlik için)
+
+# Kafka Integration Control
+kafka:
+  enabled: ${KAFKA_ENABLED:false}
+
+server:
+  port: ${SERVER_PORT:8084}
+  error:
+    include-message: always
+    include-binding-errors: always
+
+# Logging
+logging:
+  level:
+    com.triobank.transaction: DEBUG
+    org.springframework.kafka: INFO
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# Actuator
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+# OpenAPI/Swagger
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+  info:
+    title: Transaction Service API
+    description: TrioBank Transaction Service - Orchestrates Financial Transactions
+    version: 1.0.0
+
+# Custom Transaction Properties
+transaction:
+  # Default values
+  default-currency: TRY
+  
+  # External Service URLs (from environment variables)
+  services:
+    account-service:
+      url: ${ACCOUNT_SERVICE_URL:http://localhost:8080}
+      endpoints:
+        validation: /v1/accounts/{id}/validation
+    
+    card-service:
+      url: ${CARD_SERVICE_URL:http://localhost:8081}
+      endpoints:
+        authorize: /v1/cards/{id}/authorize
+        validate-pin: /v1/cards/{id}/validate-pin
+    
+    ledger-service:
+      url: ${LEDGER_SERVICE_URL:http://localhost:8082}
+      endpoints:
+        balance: /api/v1/ledger/balances/{accountId}
+  
+  # Kafka Topics (Consumer - dinlenecek)
+  # Standart: {domain}.{event}.{version}
+  kafka:
+    consumer:
+      topics:
+        # Ledger Service Events - Debezium routes by 'type' field!
+        transaction-posted: ledger.TransactionPosted.${app.kafka.topic.version}
+        transaction-reversed: ledger.TransactionReversed.${app.kafka.topic.version}
+    
+    # Debezium CDC (Publisher - Referans için)
+    debezium:
+      topic-prefix: triobank.${app.env}.transaction
+      topic-suffix: .${app.kafka.topic.version}
+
+# Global App Settings
+app:
+  env: ${APP_ENV:local}
+  kafka:
+    topic:
+      version: v1
+  
+  # Outbox Pattern Config
+  outbox:
+    enabled: true
+    table-name: outbox_events
+    fields:
+      id: id
+      aggregate-type: aggregate_type      # Topic routing
+      aggregate-id: aggregate_id          # Kafka message key
+      type: type                          # Event type
+      payload: payload                    # JSON payload
+      timestamp: created_at               # Event timestamp
