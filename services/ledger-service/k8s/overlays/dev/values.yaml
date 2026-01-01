@@ -26,3 +26,14 @@ databases:
 database:
   name: ledger_db
 
+# Ingress Configuration for Dev
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+  hosts:
+    - host: ""
+      paths:
+        - path: /ledger(/|$)(.*)
+          pathType: ImplementationSpecific
