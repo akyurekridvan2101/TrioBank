@@ -1,11 +1,14 @@
 package com.triobank.ledger.controller;
 
 import com.triobank.ledger.domain.model.EntryType;
+import com.triobank.ledger.dto.request.BlockAmountRequest;
+import com.triobank.ledger.dto.request.ReleaseAmountRequest;
 import com.triobank.ledger.dto.response.AccountBalanceResponse;
 import com.triobank.ledger.dto.response.AccountStatementResponse;
 import com.triobank.ledger.service.BalanceService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -168,5 +171,49 @@ public class BalanceController {
                 "difference", calculatedBalance.subtract(cachedBalance.getBalance()).abs());
 
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Tutar bloke etme (Transaction başlatırken)
+     * 
+     * TRANSACTION SERVICE ENTEGRASYONU:
+     * Transaction Service bir işlem başlatmadan önce bakiye bloke eder.
+     * 
+     * POST /api/v1/ledger/balances/{accountId}/block
+     */
+    @PostMapping("/balances/{accountId}/block")
+    @Operation(summary = "Block amount", description = "Blocks amount for pending transaction (Transaction Service integration)")
+    public ResponseEntity<Void> blockAmount(
+            @PathVariable String accountId,
+            @Valid @RequestBody BlockAmountRequest request) {
+
+        log.info("Blocking amount {} for account {}, transaction: {}",
+                request.getAmount(), accountId, request.getTransactionId());
+
+        balanceService.blockAmount(accountId, request.getAmount(), request.getTransactionId());
+
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Bloke tutarı serbest bırakma (Transaction tamamlandı/iptal edildi)
+     * 
+     * TRANSACTION SERVICE ENTEGRASYONU:
+     * Transaction tamamlandığında veya iptal edildiğinde bloke kaldırılır.
+     * 
+     * POST /api/v1/ledger/balances/{accountId}/release
+     */
+    @PostMapping("/balances/{accountId}/release")
+    @Operation(summary = "Release blocked amount", description = "Releases previously blocked amount (Transaction Service integration)")
+    public ResponseEntity<Void> releaseAmount(
+            @PathVariable String accountId,
+            @Valid @RequestBody ReleaseAmountRequest request) {
+
+        log.info("Releasing blocked amount {} for account {}, transaction: {}",
+                request.getAmount(), accountId, request.getTransactionId());
+
+        balanceService.releaseAmount(accountId, request.getAmount(), request.getTransactionId());
+
+        return ResponseEntity.noContent().build();
     }
 }

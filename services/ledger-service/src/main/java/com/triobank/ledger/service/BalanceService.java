@@ -58,10 +58,14 @@ public class BalanceService {
                 return AccountBalanceResponse.builder()
                                 .accountId(balance.getAccountId())
                                 .balance(balance.getBalance())
+                                .blockedAmount(balance.getBlockedAmount())
+                                .availableBalance(balance.getAvailableBalance())
+                                .pendingDebits(balance.getPendingDebits())
+                                .pendingCredits(balance.getPendingCredits())
                                 .currency(balance.getCurrency())
                                 .lastEntryId(balance.getLastEntryId())
                                 .lastUpdatedAt(balance.getLastUpdatedAt())
-                                .version(balance.getVersion() != null ? balance.getVersion().intValue() : null)
+                                .version(balance.getVersion())
                                 .build();
         }
 
@@ -199,8 +203,17 @@ public class BalanceService {
                 BigDecimal runningBalance = startingBalance;
 
                 // DESC → ASC çevir (en eski başta olsun)
+                // Aynı tarihteki işlemleri createdAt'e göre de sırala
                 List<LedgerEntry> sortedEntries = new ArrayList<>(entries);
-                sortedEntries.sort((a, b) -> a.getPostingDate().compareTo(b.getPostingDate()));
+                sortedEntries.sort((a, b) -> {
+                    // Önce postingDate'e göre sırala
+                    int dateCompare = a.getPostingDate().compareTo(b.getPostingDate());
+                    if (dateCompare != 0) {
+                        return dateCompare;
+                    }
+                    // Aynı tarihteyse createdAt'e göre sırala (eski→yeni)
+                    return a.getCreatedAt().compareTo(b.getCreatedAt());
+                });
 
                 for (LedgerEntry entry : sortedEntries) {
                         runningBalance = runningBalance.add(entry.getSignedAmount());
@@ -265,5 +278,94 @@ public class BalanceService {
                 }
 
                 return matches;
+        }
+
+        /**
+         * Tutarı bloke et (Transaction başlatıldığında)
+         * 
+         * TRANSACTION SERVICE ENTEGRASYONU:
+         * Transaction Service bir işlem başlatmadan önce bu metodu çağırır.
+         * Böylece aynı para iki kere harcanamaz.
+         * 
+         * @param accountId     Hesap ID
+         * @param amount        Bloke edilecek tutar
+         * @param transactionId Transaction ID (tracking için)
+         * @throws AccountNotFoundException Hesap bulunamadı
+         * @throws IllegalStateException    Yetersiz kullanılabilir bakiye
+         */
+        @Transactional
+        public void blockAmount(String accountId, BigDecimal amount, String transactionId) {
+                log.info("Blocking {} for account {}, transaction: {}", amount, accountId, transactionId);
+
+                AccountBalance balance = balanceRepository
+                                .findByAccountId(accountId)
+                                .orElseThrow(() -> new AccountNotFoundException(accountId));
+
+                // Domain model'deki business logic kullanılır
+                balance.blockAmount(amount);
+
+                balanceRepository.save(balance);
+
+                log.debug("Amount blocked successfully. New blocked amount: {}, Available: {}",
+                                balance.getBlockedAmount(), balance.getAvailableBalance());
+        }
+
+        /**
+         * Bloke edilen tutarı serbest bırak (Transaction tamamlandı/iptal edildi)
+         * 
+         * TRANSACTION SERVICE ENTEGRASYONU:
+         * Transaction tamamlandığında veya iptal edildiğinde bu metod çağrılır.
+         * 
+         * TODO: Gelecekte transaction_holds tablosu eklendiğinde,
+         * burası transactionId ile ilgili bloke kaydını bulup serbest bırakacak.
+         * 
+         * @param accountId Hesap ID
+         * @param amount    Serbest bırakılacak tutar
+         * @throws AccountNotFoundException Hesap bulunamadı
+         * @throws IllegalStateException    Bloke tutardan fazla release edilmeye
+         *                                  çalışılırsa
+         */
+        @Transactional
+        public void releaseAmount(String accountId, BigDecimal amount, String transactionId) {
+                log.info("Releasing amount {} for account {}, transaction: {}", amount, accountId, transactionId);
+
+                AccountBalance balance = balanceRepository
+                                .findByAccountId(accountId)
+                                .orElseThrow(() -> new AccountNotFoundException(accountId));
+
+                // Domain model'deki business logic kullanılır
+                balance.releaseAmount(amount);
+
+                balanceRepository.save(balance);
+
+                log.debug("Amount released successfully. New blocked amount: {}, Available: {}",
+                                balance.getBlockedAmount(), balance.getAvailableBalance());
+        }
+
+        /**
+         * Yeterli kullanılabilir bakiye var mı kontrol et
+         * 
+         * TRANSACTION SERVICE ENTEGRASYONU:
+         * Transaction başlatmadan önce bu metod çağrılarak
+         * yeterli bakiye olup olmadığı kontrol edilir.
+         * 
+         * @param accountId Hesap ID
+         * @param amount    Kontrol edilecek tutar
+         * @return true: Yeterli bakiye var, false: Yetersiz
+         * @throws AccountNotFoundException Hesap bulunamadı
+         */
+        public boolean hasSufficientBalance(String accountId, BigDecimal amount) {
+                log.debug("Checking sufficient balance for account {}, amount: {}", accountId, amount);
+
+                AccountBalance balance = balanceRepository
+                                .findByAccountId(accountId)
+                                .orElseThrow(() -> new AccountNotFoundException(accountId));
+
+                boolean sufficient = balance.hasSufficientAvailableBalance(amount);
+
+                log.debug("Account {} has {} balance, requested: {}, sufficient: {}",
+                                accountId, balance.getAvailableBalance(), amount, sufficient);
+
+                return sufficient;
         }
 }
