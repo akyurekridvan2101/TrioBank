@@ -10,8 +10,10 @@ import java.time.Instant;
 /**
  * AccountCreatedEvent - Account Service'ten gelen event
  * 
- * Topic: triobank.prod.account.AccountCreated.v1
+ * Topic: account.AccountCreated.v1
  * Action: Initial balance (0.00) oluştur
+ * 
+ * NOT: Debezium EventRouter metadata'yı soyuyor, sadece payload geliyor!
  */
 @Data
 @Builder
@@ -19,29 +21,13 @@ import java.time.Instant;
 @AllArgsConstructor
 public class AccountCreatedEvent {
 
-    /** Event metadata */
-    private String eventId;
-    private String eventType;
-    private String eventVersion;
-    private Instant timestamp;
-    private String aggregateType;
-    private String aggregateId;
-
-    /** Event payload */
-    private Payload payload;
-
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class Payload {
-        private String accountId;
-        private String accountNumber;
-        private String customerId;
-        private String accountType;
-        private String currency;
-        private String status;
-        private String createdBy;
-        private Instant createdAt;
-    }
+    // Payload fields (EventRouter extracts these from outbox)
+    private String accountId;
+    private String accountNumber;
+    private String customerId;
+    private String accountType;
+    private String currency;
+    private String status;
+    private String createdBy;
+    private Instant createdAt;
 }

@@ -12,7 +12,7 @@ import java.time.LocalDate;
 /**
  * TransactionPostedEvent - Transaction ledger'a kaydedildi (SAGA success)
  * 
- * Topic: triobank.prod.ledger.Transaction.v1
+ * Topic: ledger.Transaction.v1
  * Outbox: aggregate_type=Transaction, type=TransactionPosted
  * Consumers: Transaction Service (SAGA)
  */

@@ -25,6 +25,18 @@ public class AccountBalanceResponse {
     /** Güncel bakiye */
     private BigDecimal balance;
 
+    /** Bloke edilmiş tutar (pending transactions için ayrılmış) */
+    private BigDecimal blockedAmount;
+
+    /** Kullanılabilir bakiye (balance - blockedAmount) */
+    private BigDecimal availableBalance;
+
+    /** Bekleyen borç işlemleri toplamı */
+    private BigDecimal pendingDebits;
+
+    /** Bekleyen alacak işlemleri toplamı */
+    private BigDecimal pendingCredits;
+
     /** Para birimi */
     private String currency;
 
@@ -35,5 +47,5 @@ public class AccountBalanceResponse {
     private java.util.UUID lastEntryId;
 
     /** Optimistic lock versiyonu */
-    private Integer version;
+    private Long version;
 }

@@ -10,7 +10,7 @@ import java.time.Instant;
 /**
  * TransactionReversedEvent - Transaction reversal tamamlandı
  * 
- * Topic: triobank.prod.ledger.Transaction.v1
+ * Topic: ledger.Transaction.v1
  * Outbox: aggregate_type=Transaction, type=TransactionReversed
  * Consumers: Transaction Service (SAGA compensation), Reporting
  */
