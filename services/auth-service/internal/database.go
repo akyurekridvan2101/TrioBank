@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/TrioBank/triobank-platform/microservices/auth-service/config"
@@ -27,7 +28,9 @@ type RedisDB struct {
 
 func (db MongoDB) loginControl(ctx context.Context, data loginData) (User, error) {
 	var user User
-	collection := db.Db.Collection("Users").FindOne(ctx, bson.M{"tc": data.Tc})
+	// Normalize TC for query (trim whitespace)
+	tc := strings.TrimSpace(data.Tc)
+	collection := db.Db.Collection("Users").FindOne(ctx, bson.M{"tc": tc})
 	err := collection.Decode(&user)
 	if err != nil {
 		return user, err
@@ -112,6 +115,8 @@ func (db MongoDB) isRefreshTokenExistAndActive(ctx context.Context, refreshToken
 
 func (db MongoDB) isUserExist(ctx context.Context, tc string) error {
 	collection := db.Db.Collection("Users")
+	// Normalize TC for query (trim whitespace)
+	tc = strings.TrimSpace(tc)
 	result := collection.FindOne(ctx, bson.M{"tc": tc})
 	if errors.Is(result.Err(), mongo.ErrNoDocuments) {
 		return nil
@@ -146,6 +151,92 @@ func (db MongoDB) validateUserPassword(ctx context.Context, userUuid, password s
 func (db MongoDB) updatePassword(ctx context.Context, userId primitive.ObjectID, newPassword string) error {
 	collection := db.Db.Collection("Users")
 	_, err := collection.UpdateOne(ctx, bson.M{"_id": userId}, bson.M{"$set": bson.M{"hashedPassword": newPassword}})
+	return err
+}
+
+func (db MongoDB) updateUserContact(ctx context.Context, userId primitive.ObjectID, email, phone string) error {
+	collection := db.Db.Collection("Users")
+	update := bson.M{}
+	if email != "" {
+		// Normalize email: trim and lowercase
+		update["email"] = strings.TrimSpace(strings.ToLower(email))
+	}
+	if phone != "" {
+		// Normalize phone: trim
+		update["tel"] = strings.TrimSpace(phone)
+	}
+	if len(update) == 0 {
+		return nil
+	}
+	_, err := collection.UpdateOne(ctx, bson.M{"_id": userId}, bson.M{"$set": update})
+	return err
+}
+
+func (db MongoDB) getUserIdByUUID(ctx context.Context, uuid string) (primitive.ObjectID, error) {
+	collection := db.Db.Collection("Users")
+	var user User
+	err := collection.FindOne(ctx, bson.M{"uuid": uuid}).Decode(&user)
+	if err != nil {
+		return primitive.NilObjectID, err
+	}
+	return user.Id, nil
+}
+
+func (db MongoDB) verifyUserEmail(ctx context.Context, tc string, email string) (User, error) {
+	var user User
+	// Normalize input: T.C. Kimlik No'yu trim et
+	tc = strings.TrimSpace(tc)
+	// Email'i normalize et: trim ve lowercase
+	email = strings.TrimSpace(strings.ToLower(email))
+	
+	// MongoDB'de TC ile kullanıcıyı bul
+	// Önce normalize edilmiş TC ile dene
+	collection := db.Db.Collection("Users").FindOne(ctx, bson.M{"tc": tc})
+	err := collection.Decode(&user)
+	
+	// Eğer bulunamazsa, eski kayıtlar için boşluklu TC ile de ara
+	if err != nil && errors.Is(err, mongo.ErrNoDocuments) {
+		// TC'nin başında/sonunda boşluk olabilir, regex ile ara
+		// TC sadece rakam olduğu için regex güvenli
+		regexTc := "^\\s*" + tc + "\\s*$"
+		collection = db.Db.Collection("Users").FindOne(ctx, bson.M{"tc": bson.M{"$regex": regexTc}})
+		err = collection.Decode(&user)
+	if err != nil {
+			return user, err
+		}
+		// Bulunan kullanıcının TC'sini normalize et (veritabanını düzelt)
+		if strings.TrimSpace(user.Tc) != user.Tc {
+			// Veritabanındaki TC'yi normalize et
+			normalizedTc := strings.TrimSpace(user.Tc)
+			_, updateErr := db.Db.Collection("Users").UpdateOne(ctx, bson.M{"_id": user.Id}, bson.M{"$set": bson.M{"tc": normalizedTc}})
+			if updateErr == nil {
+				user.Tc = normalizedTc
+			}
+		}
+	} else if err != nil {
+		return user, err
+	}
+	
+	// Email eşleşmesini case-insensitive ve trim-aware kontrol et
+	userEmailNormalized := strings.TrimSpace(strings.ToLower(user.Email))
+	if userEmailNormalized != email {
+		return user, errors.New("email does not match")
+	}
+	
+	// Email'i de normalize et (veritabanını düzelt)
+	if userEmailNormalized != user.Email {
+		_, updateErr := db.Db.Collection("Users").UpdateOne(ctx, bson.M{"_id": user.Id}, bson.M{"$set": bson.M{"email": userEmailNormalized}})
+		if updateErr == nil {
+			user.Email = userEmailNormalized
+		}
+	}
+	
+	return user, nil
+}
+
+func (db MongoDB) deactivateAllRefreshTokens(ctx context.Context, userId primitive.ObjectID) error {
+	collection := db.Db.Collection("Tokens")
+	_, err := collection.UpdateMany(ctx, bson.M{"user_id": userId}, bson.M{"$set": bson.M{"isActive": false}})
 	return err
 }
 
@@ -281,21 +372,27 @@ func StartMongoDB() *mongo.Database {
 	mongoPassword := config.GetEnv("MONGO_PASSWORD")
 
 	if mongoUsername != "" && mongoPassword != "" {
-		if mongoURI == "" {
-			mongoURI = "mongodb://localhost:27017"
-		}
 		mongoHost := "localhost:27017"
-		if len(mongoURI) > 10 {
-			uriWithoutPrefix := mongoURI[10:]
 
-			if len(uriWithoutPrefix) > 0 && uriWithoutPrefix[len(uriWithoutPrefix)-1] == '/' {
-				uriWithoutPrefix = uriWithoutPrefix[:len(uriWithoutPrefix)-1]
-			}
-			if uriWithoutPrefix != "" {
-				mongoHost = uriWithoutPrefix
+		// MONGO_URI can be in two formats:
+		// 1. "mongodb://host:port" (with protocol)
+		// 2. "host:port" (without protocol, K8s style)
+		if mongoURI != "" {
+			if strings.HasPrefix(mongoURI, "mongodb://") {
+				// Remove "mongodb://" prefix (10 chars)
+				mongoHost = strings.TrimSuffix(mongoURI[10:], "/")
+			} else {
+				// Use as-is (K8s ConfigMap format)
+				mongoHost = strings.TrimSuffix(mongoURI, "/")
 			}
 		}
+
 		mongoURI = fmt.Sprintf("mongodb://%s:%s@%s", mongoUsername, mongoPassword, mongoHost)
+	} else if mongoURI != "" && !strings.HasPrefix(mongoURI, "mongodb://") {
+		// No auth but URI doesn't have protocol
+		mongoURI = "mongodb://" + mongoURI
+	} else if mongoURI == "" {
+		mongoURI = "mongodb://localhost:27017"
 	}
 	client, err := mongo.Connect(ctx, options.Client().ApplyURI(mongoURI))
 	if err != nil {

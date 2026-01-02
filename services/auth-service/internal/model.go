@@ -64,6 +64,15 @@ type DataBaseI interface {
 	getUserById(ctx context.Context, userId primitive.ObjectID) (User, error)
 	validateUserPassword(ctx context.Context, userUuid, password string) (primitive.ObjectID, error)
 	updatePassword(ctx context.Context, userId primitive.ObjectID, newPassword string) error
+	updateUserContact(ctx context.Context, userId primitive.ObjectID, email, phone string) error
+	getUserIdByUUID(ctx context.Context, uuid string) (primitive.ObjectID, error)
+	verifyUserEmail(ctx context.Context, tc string, email string) (User, error)
+	deactivateAllRefreshTokens(ctx context.Context, userId primitive.ObjectID) error
+}
+
+type updateData struct {
+	Email string `json:"email"`
+	Phone string `json:"phone"`
 }
 
 type SessionManagerI interface {
