@@ -1,0 +1,112 @@
+commonAnnotations:
+  argocd.argoproj.io/sync-wave: "5"
+
+replicaCount: 1
+
+image:
+  repository: akyurekridvan2101/auth-service
+  pullPolicy: Always
+  tag: "latest"
+
+imagePullSecrets:
+  - name: dockerhub-credentials
+
+serviceAccount:
+  create: true
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext: {}
+
+securityContext:
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: 8080
+
+ingress:
+  enabled: false
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+livenessProbe:
+  httpGet:
+    path: /auth/health
+    port: 8080
+  initialDelaySeconds: 60
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /auth/health
+    port: 8080
+  initialDelaySeconds: 60
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# ConfigMap Environment Variables
+config:
+  APP_ENV: "prod"
+  AUTH_SERVICE_PORT: ":8080"
+  MONGO_URI: "auth-mongodb.triobank.svc.cluster.local:27017"
+  MONGO_NAME: "AuthServiceDB"
+  REDIS_PORT: "auth-redis.triobank.svc.cluster.local:6379"
+  REDIS_NAME: "AuthServiceRedis"
+  KAFKA_BROKER: "kafka-kafka-bootstrap.triobank.svc.cluster.local:9092"
+  MAIL_SERVICE_PORT: "mail-service.triobank.svc.cluster.local:8081"
+
+# Database Configurations
+databases:
+  mongodb:
+    enabled: true
+    serviceName: auth-mongodb
+    type: mongodb
+    portName: mongodb
+    externalName: "host.minikube.internal"  # Default for local/Docker - override in production
+    annotations:
+      description: "Auth MongoDB database"
+  
+  redis:
+    enabled: true
+    serviceName: auth-redis
+    type: redis
+    portName: redis
+    externalName: "host.minikube.internal"  # Default for local/Docker - override in production
+    annotations:
+      description: "Auth Redis cache"
+
+# External Secrets (Vault Integration)
+externalSecrets:
+  - name: db-credentials
+    enabled: true
+    vaultPath: secret/dev/services/auth
+    targetSecret: auth-db-credentials
+    refreshInterval: "1h"
+    fields:
+      - secretKey: MONGO_USERNAME
+        property: mongo_username
+      - secretKey: MONGO_PASSWORD
+        property: mongo_password
+      - secretKey: REDIS_PASSWORD
+        property: redis_password
+      - secretKey: SECRET_KEY
+        property: secret_key
+      - secretKey: TOKEN_SIGNATURE
+        property: token_signature
