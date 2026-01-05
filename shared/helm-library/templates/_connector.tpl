@@ -41,7 +41,7 @@ VALUES EXAMPLE:
     
     outbox:
       routeByField: "aggregate_type"
-      topicReplacement: "triobank.local.ledger.${routedByValue}.v1"
+      topicReplacement: "ledger.${routedByValue}.v1"
       fields:
         id: "id"
         key: "aggregate_id"
@@ -77,8 +77,8 @@ spec:
     database.hostname: {{ .Values.connector.database.hostname }}
     database.port: {{ .Values.connector.database.port | quote }}
     database.names: {{ .Values.connector.database.names | quote }}
-    database.user: ${directory:/opt/kafka/external-configuration/{{ .Values.connector.secretVolumeName }}:username}
-    database.password: ${directory:/opt/kafka/external-configuration/{{ .Values.connector.secretVolumeName }}:password}
+    database.user: ${directory:/mnt/secrets/{{ .Values.connector.secretVolumeName }}:username}
+    database.password: ${directory:/mnt/secrets/{{ .Values.connector.secretVolumeName }}:password}
     database.encrypt: {{ .Values.connector.database.encrypt | default "false" | quote }}
     database.trustServerCertificate: {{ .Values.connector.database.trustServerCertificate | default "true" | quote }}
     
@@ -97,7 +97,7 @@ spec:
     transforms: "outbox"
     transforms.outbox.type: "io.debezium.transforms.outbox.EventRouter"
     transforms.outbox.route.by.field: {{ .Values.connector.outbox.routeByField | default "aggregate_type" | quote }}
-    transforms.outbox.route.topic.replacement: {{ .Values.connector.outbox.topicReplacement | default (printf "triobank.local.%s.${routedByValue}.v1" .Values.connector.topic.prefix) | quote }}
+    transforms.outbox.route.topic.replacement: {{ .Values.connector.outbox.topicReplacement | default (printf "%s.${routedByValue}.v1" .Values.connector.topic.prefix) | quote }}
     transforms.outbox.table.field.event.id: {{ .Values.connector.outbox.fields.id | default "id" | quote }}
     transforms.outbox.table.field.event.key: {{ .Values.connector.outbox.fields.key | default "aggregate_id" | quote }}
     transforms.outbox.table.field.event.type: {{ .Values.connector.outbox.fields.type | default "type" | quote }}

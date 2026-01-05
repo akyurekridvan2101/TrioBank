@@ -328,7 +328,7 @@ connector:
   
   outbox:
     routeByField: "aggregate_type"         # Bu kolona göre topic'e route et
-    topicReplacement: "triobank.local.ledger.${routedByValue}.v1"
+    topicReplacement: "ledger.${routedByValue}.v1"
     fields:
       id: "id"
       key: "aggregate_id"
@@ -382,8 +382,8 @@ CREATE TABLE dbo.outbox_events (
 
 Template yukarıdaki values ile şu topic'i oluşturur:
 ```
-triobank.local.ledger.ACCOUNT.v1
-                     ↑ (aggregate_type değeri)
+ledger.ACCOUNT.v1
+       ↑ (aggregate_type değeri)
 ```
 
 ---
@@ -581,7 +581,7 @@ connector:
     prefix: "account"
   outbox:
     routeByField: "aggregate_type"
-    topicReplacement: "triobank.prod.account.${routedByValue}.v1"
+    topicReplacement: "account.${routedByValue}.v1"
   performance:
     pollInterval: "100"
     maxBatchSize: "4096"
