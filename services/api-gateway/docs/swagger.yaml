@@ -1,0 +1,26 @@
+basePath: /
+host: localhost:3000
+info:
+  contact:
+    email: support@triobank.com
+    name: API Support
+    url: http://www.triobank.com/support
+  description: API Gateway for TrioBank microservices platform. Provides unified entry
+    point with rate limiting, authentication, and request routing.
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  termsOfService: http://triobank.com/terms/
+  title: TrioBank API Gateway
+  version: "1.0"
+paths: {}
+schemes:
+- http
+- https
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

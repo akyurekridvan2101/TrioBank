@@ -1,0 +1,102 @@
+commonAnnotations:
+  argocd.argoproj.io/sync-wave: "15"  # Gateway son deploy edilmeli
+
+replicaCount: 2  # High availability
+
+image:
+  repository: akyurekridvan2101/api-gateway
+  pullPolicy: Always
+  tag: "latest"
+
+imagePullSecrets:
+  - name: dockerhub-credentials
+
+serviceAccount:
+  create: true
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext: {}
+
+securityContext:
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 3000
+  targetPort: 3000
+
+ingress:
+  enabled: false
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 3000
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 3000
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+# ConfigMap Environment Variables
+config:
+  APP_ENV: "prod"
+  API_GATEWAY_PORT: "3000"
+  
+  # Redis Configuration
+  API_GATEWAY_REDIS_ADDRESS: "api-gateway-redis.triobank.svc.cluster.local:6379"
+  API_GATEWAY_REDIS_CLIENT_NAME: "ApiGatewayRedis"
+  
+  # Microservice URLs (Kubernetes Internal DNS)
+  AUTH_SERVICE_URL: "http://auth-service.triobank.svc.cluster.local:8080"
+  CLIENT_SERVICE_URL: "http://client-service.triobank.svc.cluster.local:8082"
+  ACCOUNT_SERVICE_URL: "http://account-service.triobank.svc.cluster.local:8081"
+  TRANSACTION_SERVICE_URL: "http://transaction-service.triobank.svc.cluster.local:8084"
+  LEDGER_SERVICE_URL: "http://ledger-service.triobank.svc.cluster.local:8082"
+  CARD_SERVICE_URL: "http://card-service.triobank.svc.cluster.local:8083"
+  MAIL_SERVICE_URL: "http://mail-service.triobank.svc.cluster.local:8081"
+
+# Redis for Rate Limiting
+databases:
+  redis:
+    enabled: true
+    serviceName: api-gateway-redis
+    type: redis
+    portName: redis
+    externalName: "host.minikube.internal"  # Minikube için local Redis
+    annotations:
+      description: "API Gateway Redis for rate limiting"
+
+# Vault Secrets
+externalSecrets:
+  - name: gateway-credentials
+    enabled: true
+    vaultPath: secret/dev/services/api-gateway
+    targetSecret: api-gateway-credentials
+    refreshInterval: "1h"
+    fields:
+      - secretKey: API_GATEWAY_REDIS_PASSWORD
+        property: redis_password
