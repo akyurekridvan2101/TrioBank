@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  api-gateway-redis:
+    image: redis:7.4-alpine
+    container_name: ApiGatewayRedis
+    ports:
+      - "6380:6379"  # 6380 kullanarak auth-service Redis ile çakışmayı önler
+    environment:
+      - REDIS_ARGS=--requirepass ${API_GATEWAY_REDIS_PASSWORD:-gateway_redis_password}
+    volumes:
+      - api_gateway_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "--pass", "${API_GATEWAY_REDIS_PASSWORD:-gateway_redis_password}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - gateway-network
+
+networks:
+  gateway-network:
+    driver: bridge
+
+volumes:
+  api_gateway_redis_data:

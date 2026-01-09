@@ -1,0 +1,72 @@
+# API Gateway - Development Environment
+
+replicaCount: 1  # Dev'de tek replica yeter
+
+image:
+  pullPolicy: Always
+
+# Service Configuration - NodePort for dev
+service:
+  type: NodePort
+  port: 3000
+  nodePort: 30080  # NodePort range: 30000-32767
+
+# Dev-specific config
+config:
+  APP_ENV: "development"
+  API_GATEWAY_PORT: "3000"
+  
+  # Redis - Local Docker'dan eri şim
+  API_GATEWAY_REDIS_ADDRESS: "api-gateway-redis.triobank.svc.cluster.local:6379"
+  API_GATEWAY_REDIS_CLIENT_NAME: "ApiGatewayRedisDev"
+  
+  # Microservice URLs (K8s Internal)
+  AUTH_SERVICE_URL: "http://auth-service.triobank.svc.cluster.local:8080"
+  CLIENT_SERVICE_URL: "http://client-service.triobank.svc.cluster.local:8082"
+  ACCOUNT_SERVICE_URL: "http://account-service.triobank.svc.cluster.local:8081"
+  TRANSACTION_SERVICE_URL: "http://transaction-service.triobank.svc.cluster.local:8084"
+  LEDGER_SERVICE_URL: "http://ledger-service.triobank.svc.cluster.local:8082"
+  CARD_SERVICE_URL: "http://card-service.triobank.svc.cluster.local:8083"
+  MAIL_SERVICE_URL: "http://mail-service.triobank.svc.cluster.local:8081"
+
+# Redis ExternalName Service
+databases:
+  redis:
+    enabled: true
+    serviceName: api-gateway-redis
+    type: redis
+    portName: redis
+    externalName: "host.minikube.internal"
+    annotations:
+      description: "API Gateway Redis - Rate Limiting"
+
+# Vault Secrets
+externalSecrets:
+  - name: gateway-credentials
+    enabled: true
+    vaultPath: secret/dev/services/api-gateway
+    targetSecret: api-gateway-credentials
+    refreshInterval: "1h"
+    fields:
+      - secretKey: API_GATEWAY_REDIS_PASSWORD
+        property: redis_password
+
+# Resources for dev
+resources:
+  limits:
+    cpu: 500m
+    memory: 256Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+# Ingress Configuration for Dev
+ingress:
+  enabled: true
+  className: nginx
+  annotations: {}
+  hosts:
+    - host: ""
+      paths:
+        - path: /
+          pathType: Prefix
