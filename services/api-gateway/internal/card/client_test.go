@@ -308,6 +308,5 @@ func TestCardError(t *testing.T) {
 	expectedMsg := "[Card 404] NOT_FOUND: Card not found"
 	if err.Error() != expectedMsg {
 		t.Errorf("Expected error message '%s', got '%s'", expectedMsg, err.Error())
-		}
 	}
 }

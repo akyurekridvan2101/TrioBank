@@ -12,14 +12,9 @@ import java.util.Optional;
 
 /**
  * Ürün Kataloğu Servisi
- * 
- * Bankanın sunduğu ürün tanımlarına erişim sağlar.
- * 
- * Performans Notu:
- * Bu veriler "Reference Data" statüsündedir (Çok sık değişmez, çok sık okunur).
- * İleride buraya @Cacheable eklenerek veritabanı yükü sıfıra indirilebilir.
- * Şimdilik doğrudan DB'den okuyoruz ama servis katmanı sayesinde o kapıyı açık
- * bıraktık.
+ *
+ * Bankanın sunduğu ürün tanımlarına (Vadesiz Hesap, Altın Hesabı vb.) erişim sağlar.
+ * Veriler genellikle statik olduğu için cache mekanizması eklenebilir.
  */
 @Service
 @RequiredArgsConstructor

@@ -18,15 +18,9 @@ import java.util.stream.Collectors;
 
 /**
  * Hesap Yönetimi API
- * 
- * Bu kontrolcü (Controller) dış dünyanın (Mobil Uygulama, Web Sitesi)
- * bankacılık sistemimizle konuştuğu kapıdır.
- * 
- * Sorumlulukları:
- * 1. Gelen HTTP isteklerini karşılamak.
- * 2. Gelen veriyi doğrulamak (@Valid).
- * 3. İşi asıl yapacak olan "Service" katmanına devretmek.
- * 4. Sonucu dış dünyaya "Response DTO" olarak dönmek.
+ *
+ * Mobil uygulama veya web sitesinden gelen hesapla ilgili istekleri karşılar.
+ * Validasyon işlemlerini yapıp, asıl işi Service katmanına devreder.
  */
 @RestController
 @RequestMapping("/v1/accounts")
@@ -38,10 +32,9 @@ public class AccountController {
 
     /**
      * [POST] Yeni Hesap Açılışı
-     * 
-     * Müşteri yeni bir vadesiz hesap, altın hesabı vb. açmak istediğinde buraya
-     * gelir.
-     * Başarılı olursa 201 (Created) döner.
+     *
+     * Vadesiz hesap, altın hesabı vb. açılış işlemleri burada yapılır.
+     * Başarılı olursa 201 Created döner.
      */
     @PostMapping
     public ResponseEntity<AccountResponse> createAccount(@Valid @RequestBody CreateAccountRequest request) {
@@ -55,8 +48,6 @@ public class AccountController {
 
     /**
      * [GET] Hesap Detayı Görüntüleme
-     * 
-     * Tekil bir hesabın detaylarını (Bakiye, IBAN vb.) getirir.
      */
     @GetMapping("/{id}")
     public ResponseEntity<AccountResponse> getAccount(@PathVariable String id) {
@@ -66,12 +57,9 @@ public class AccountController {
 
     /**
      * [GET] Müşteri Hesap Listesi
-     * 
-     * Bir müşterinin sahip olduğu tüm hesapları listeler.
-     * İsteğe bağlı olarak statü filtresi verilebilir.
-     * Örn: ?customerId=123
-     * Örn: ?customerId=123&status=ACTIVE
-     * Örn: ?customerId=123&status=ACTIVE&status=FROZEN
+     *
+     * Müşterinin tüm hesaplarını listeler.
+     * İsteğe bağlı statü filtresi (ACTIVE, FROZEN vb.) verilebilir.
      */
     @GetMapping
     public ResponseEntity<List<AccountResponse>> getCustomerAccounts(
@@ -90,10 +78,9 @@ public class AccountController {
 
     /**
      * [PATCH] Hesap Durumu Güncelleme
-     * 
-     * Hesabı dondurmak (Freeze), kapatmak (Close) veya tekrar açmak (Activate) için
-     * kullanılır.
-     * Bu işlem hassas olduğu için "neden" (reason) bilgisi de istenir.
+     *
+     * Hesabı dondurma (Freeze), kapatma (Close) veya aktifleştirme işlemleri.
+     * Hassas işlem olduğu için sebep (reason) belirtilmesi zorunludur.
      */
     @PatchMapping("/{id}/status")
     public ResponseEntity<Void> changeStatus(
@@ -108,8 +95,8 @@ public class AccountController {
 
     /**
      * [PATCH] Hesap Yapılandırması Güncelleme
-     * 
-     * Hesaba özel ayarların güncellenmesi için.
+     *
+     * Hesaba özel ayarların (bildirim tercihleri vs) güncellenmesi.
      */
     @PatchMapping("/{id}/configuration")
     public ResponseEntity<Void> updateConfiguration(
@@ -123,11 +110,10 @@ public class AccountController {
     /**
      * [GET] Transaction Validation
      *
-     * Transaction Service bir işlem başlatmadan önce hesabın durumunu,
-     * ürün kurallarını ve limitleri kontrol etmek için bu endpoint'i çağırır.
+     * Transaction Service tarafından işlem öncesi kontrol (limit, statü) için çağrılır.
      *
      * @param id Hesap ID
-     * @return Validation bilgileri
+     * @return Validasyon sonucu
      */
     @GetMapping("/{id}/validation")
     public ResponseEntity<AccountValidationResponse> validateForTransaction(@PathVariable String id) {

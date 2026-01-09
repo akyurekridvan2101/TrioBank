@@ -12,7 +12,7 @@ import (
 	"github.com/segmentio/kafka-go"
 )
 
-// ConsumeUserCreatedEvents listens to UserCreated events from Kafka
+// ConsumeUserCreatedEvents Kafka'dan UserCreated eventlerini dinler
 func ConsumeUserCreatedEvents(ctx context.Context, repo *Repo) {
 	broker := config.GetEnv("KAFKA_BROKER")
 	topic := config.GetEnv("KAFKA_TOPIC")
@@ -27,8 +27,8 @@ func ConsumeUserCreatedEvents(ctx context.Context, repo *Repo) {
 		Brokers:        []string{broker},
 		Topic:          topic,
 		GroupID:        groupID,
-		MinBytes:       10e3, // 10KB
-		MaxBytes:       10e6, // 10MB
+		MinBytes:       10e3, // Min 10KB okuma
+		MaxBytes:       10e6, // Max 10MB okuma
 		CommitInterval: time.Second,
 		StartOffset:    kafka.LastOffset,
 	})
@@ -52,7 +52,7 @@ func ConsumeUserCreatedEvents(ctx context.Context, repo *Repo) {
 			if err := handleUserCreatedEvent(ctx, repo, msg.Value); err != nil {
 				log.Printf("Error handling event: %v", err)
 			} else {
-				// Commit message after successful processing
+				// İşlem başarılıysa mesajı commit edelim
 				if err := reader.CommitMessages(ctx, msg); err != nil {
 					log.Printf("Error committing message: %v", err)
 				}
@@ -61,20 +61,20 @@ func ConsumeUserCreatedEvents(ctx context.Context, repo *Repo) {
 	}
 }
 
-// handleUserCreatedEvent processes UserCreated event
+// handleUserCreatedEvent: UserCreated eventini işler
 func handleUserCreatedEvent(ctx context.Context, repo *Repo, message []byte) error {
 	var envelope EventEnvelope
 	if err := json.Unmarshal(message, &envelope); err != nil {
 		return err
 	}
 
-	// Check event type
+	// Event tipini kontrol et
 	if envelope.Metadata.EventType != "UserCreated" {
 		log.Printf("Ignoring event type: %s", envelope.Metadata.EventType)
 		return nil
 	}
 
-	// Parse payload as UserCreatedPayload
+	// Payload'ı struct'a çevir
 	payloadBytes, err := json.Marshal(envelope.Payload)
 	if err != nil {
 		return err
@@ -85,7 +85,7 @@ func handleUserCreatedEvent(ctx context.Context, repo *Repo, message []byte) err
 		return err
 	}
 
-	// Convert User to Client
+	// User verisini Client formatına dönüştürüyoruz
 	userUUID, err := uuid.Parse(userPayload.UUID)
 	if err != nil {
 		log.Printf("Invalid UUID in event: %s", userPayload.UUID)
@@ -95,12 +95,12 @@ func handleUserCreatedEvent(ctx context.Context, repo *Repo, message []byte) err
 	client := &Client{
 		ID:        uuid.New(),
 		UserID:    userUUID,
-		TCNo:      userPayload.Tc, // Use Tc (lowercase) from auth-service
+		TCNo:      userPayload.Tc, // Auth servisinden gelen TC'yi kullan (küçük harf)
 		FirstName: userPayload.Name,
 		LastName:  userPayload.Surname,
 		Email:     userPayload.Email,
 		GSM:       userPayload.Tel,
-		BirthDate: time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC), // Default birth date
+		BirthDate: time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC), // Varsayılan doğum tarihi
 		Address: Address{
 			Street:     "",
 			City:       "",
@@ -110,14 +110,14 @@ func handleUserCreatedEvent(ctx context.Context, repo *Repo, message []byte) err
 		CreatedAt: time.Now().UTC(),
 	}
 
-	// Check if client already exists
+	// Müşteri zaten var mı diye bak
 	existingClient, err := repo.Db.GetClientByUserID(ctx, userUUID)
 	if err == nil && existingClient != nil {
 		log.Printf("Client already exists for user_id: %s, skipping", userUUID)
 		return nil
 	}
 
-	// Create client in database
+	// Müşteriyi veritabanına kaydet
 	if err := repo.Db.CreateClient(ctx, client); err != nil {
 		log.Printf("Failed to create client for user_id %s: %v", userUUID, err)
 		return err
@@ -126,17 +126,17 @@ func handleUserCreatedEvent(ctx context.Context, repo *Repo, message []byte) err
 	log.Printf("Successfully created client for user_id: %s (event_id: %s)",
 		userUUID, envelope.Metadata.EventID)
 
-	// Create default account in Account Service
+	// Account servisinde varsayılan hesap açtır
 	if repo.AccountClient != nil {
 		accountReq := CreateAccountRequest{
 			CustomerID:  client.ID.String(),
-			ProductCode: "CHECKING_TRY", // Must match product_definitions table
+			ProductCode: "CHECKING_TRY", // product_definitions tablosuyla eşleşmeli
 			Currency:    "TRY",
 		}
 		account, err := repo.AccountClient.CreateAccount(accountReq)
 		if err != nil {
 			log.Printf("Failed to create account for client %s: %v", client.ID, err)
-			// Don't return error - client is created, account creation is secondary
+			// Hata dönme - müşteri oluştu, hesap açılışı ikincil öncelikte
 		} else {
 			log.Printf("Successfully created account %s for client %s", account.ID, client.ID)
 		}
@@ -145,10 +145,10 @@ func handleUserCreatedEvent(ctx context.Context, repo *Repo, message []byte) err
 	return nil
 }
 
-// ConsumeUserDeletedEvents listens to UserDeleted events from Kafka
+// ConsumeUserDeletedEvents Kafka'dan silme eventlerini dinler
 func ConsumeUserDeletedEvents(ctx context.Context, repo *Repo) {
 	broker := config.GetEnv("KAFKA_BROKER")
-	topicDeleted := "UserDeleted" // Hardcoded topic name
+	topicDeleted := "UserDeleted" // Sabit topic adı
 	groupID := config.GetEnv("KAFKA_GROUP_ID")
 
 	if broker == "" || topicDeleted == "" || groupID == "" {
@@ -185,7 +185,7 @@ func ConsumeUserDeletedEvents(ctx context.Context, repo *Repo) {
 			if err := handleUserDeletedEvent(ctx, repo, msg.Value); err != nil {
 				log.Printf("Error handling UserDeleted event: %v", err)
 			} else {
-				// Commit message after successful processing
+				// Mesajı commit et (işlem başarılı)
 				if err := reader.CommitMessages(ctx, msg); err != nil {
 					log.Printf("Error committing UserDeleted message: %v", err)
 				}
@@ -194,22 +194,22 @@ func ConsumeUserDeletedEvents(ctx context.Context, repo *Repo) {
 	}
 }
 
-// handleUserDeletedEvent processes UserDeleted event
+// handleUserDeletedEvent: Kullanıcı silme işlemini yönetir
 func handleUserDeletedEvent(ctx context.Context, repo *Repo, message []byte) error {
 	var envelope EventEnvelope
 	if err := json.Unmarshal(message, &envelope); err != nil {
 		return err
 	}
 
-	// Check event type
+	// Tip kontrolü
 	if envelope.Metadata.EventType != "UserDeleted" {
 		log.Printf("Ignoring event type: %s", envelope.Metadata.EventType)
 		return nil
 	}
 
 	// Parse payload as UserDeletedPayload
-	// Auth-service double marshals the user object (once manually, once via SendKafkaEvent)
-	// So we need to handle it accordingly
+	// Auth-service user objesini iki kere marshal ediyor (manuel + SendKafkaEvent)
+	// Bu yüzden burada ona göre işlem yapmalıyız
 	payloadBytes, err := json.Marshal(envelope.Payload)
 	if err != nil {
 		return err
@@ -217,16 +217,16 @@ func handleUserDeletedEvent(ctx context.Context, repo *Repo, message []byte) err
 
 	var payloadStr string
 	if err := json.Unmarshal(payloadBytes, &payloadStr); err != nil {
-		// If it's not a string, it might be already a map/struct
+		// String değilse, zaten map/struct olabilir
 		log.Printf("Payload is not a string, trying direct unmarshal: %v", err)
 	} else {
-		// If it was a string, it might be Base64 encoded (default behavior for []byte in JSON)
-		// Try to decode base64
+		// String ise Base64 olabilir ([]byte JSON'da öyle davranır)
+		// Base64 decode etmeyi dene
 		decodedBytes, err := base64.StdEncoding.DecodeString(payloadStr)
 		if err == nil {
 			payloadBytes = decodedBytes
 		} else {
-			// If not base64, use the string itself
+			// Base64 değilse direkt string'i kullan
 			payloadBytes = []byte(payloadStr)
 		}
 	}
@@ -243,29 +243,29 @@ func handleUserDeletedEvent(ctx context.Context, repo *Repo, message []byte) err
 		return err
 	}
 
-	// Get client to find the customerID (client.ID is used as customerId in Account Service)
+	// CustomerID'yi bulmak için client'ı çekiyoruz (client.ID account serviste customerId olarak geçer)
 	client, err := repo.Db.GetClientByUserID(ctx, userUUID)
 	if err != nil {
 		if err == ErrClientNotFound {
 			log.Printf("Client not found for user_id: %s (already passivized or never created)", userUUID)
-			return nil // Not an error - idempotent
+			return nil // Hata değil, işlem zaten yapılmış (idempotent)
 		}
 		log.Printf("Failed to get client for user_id %s: %v", userUUID, err)
 		return err
 	}
 
-	// Close all accounts in Account Service
+	// Account servisindeki tüm hesapları kapat
 	if repo.AccountClient != nil {
 		accounts, err := repo.AccountClient.GetAccountsByCustomerID(client.ID.String())
 		if err != nil {
 			log.Printf("Failed to get accounts for client %s: %v", client.ID, err)
-			// Continue with client passivization even if account fetch fails
+			// Hesapları çekemesek bile pasife almaya devam et
 		} else {
 			for _, account := range accounts {
 				if account.Status == "ACTIVE" {
 					if err := repo.AccountClient.CloseAccount(account.ID, "User account deleted"); err != nil {
 						log.Printf("Failed to close account %s: %v", account.ID, err)
-						// Continue with other accounts
+						// Diğer hesapları denemeye devam
 					} else {
 						log.Printf("Closed account %s for client %s", account.ID, client.ID)
 					}
@@ -274,11 +274,11 @@ func handleUserDeletedEvent(ctx context.Context, repo *Repo, message []byte) err
 		}
 	}
 
-	// Passivize client (soft delete)
+	// Müşteriyi pasife al (soft delete)
 	if err := repo.Db.PassivizeClientByUserID(ctx, userUUID); err != nil {
 		if err == ErrClientNotFound {
 			log.Printf("Client already passivized for user_id: %s", userUUID)
-			return nil // Not an error - idempotent
+			return nil // Hata değil (idempotent)
 		}
 		log.Printf("Failed to passivize client for user_id %s: %v", userUUID, err)
 		return err

@@ -34,19 +34,19 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Transaction Service - Business Logic
- * 
- * Orchestrates transaction creation with SAGA pattern:
- * 1. Validate request (idempotency, accounts, cards)
- * 2. Create transaction entity (status=PENDING)
- * 3. Publish TransactionStartedEvent to Kafka (via Outbox)
- * 4. Ledger consumes event and processes
- * 5. Ledger publishes TransactionPosted/TransactionReversed
- * 6. LedgerEventListener updates transaction status
- * 
- * Pattern: Similar to AccountService and CardService
- * 
- * BUG FIX #4: SERIALIZABLE isolation prevents idempotency race conditions
+ * Transaction Service - İş Mantığı (Business Logic)
+ *
+ * İşlem yaratılışını SAGA pattern ile yönetir:
+ * 1. İsteği doğrula (idempotency, hesaplar, kartlar)
+ * 2. İşlem kaydını oluştur (PENDING statüsünde)
+ * 3. TransactionStartedEvent'i Kafka'ya at (Outbox üzerinden)
+ * 4. Ledger (Defder) bu eventi işler
+ * 5. Ledger TransactionPosted veya TransactionReversed döner
+ * 6. LedgerEventListener işlem sonucuna göre statüyü günceller
+ *
+ * Pattern: AccountService ve CardService ile benzer
+ *
+ * NOT: SERIALIZABLE izolasyon seviyesi idempotency için race condition'ı önler.
  */
 @Service
 @RequiredArgsConstructor
@@ -69,46 +69,46 @@ public class TransactionService {
                                 request.getFromAccountId(), request.getToAccountId(),
                                 request.getAmount(), request.getIdempotencyKey());
 
-                // 1. Idempotency check
+                // 1. Idempotency (Mükerrerlik) kontrolü
                 Optional<Transaction> existing = transactionRepository
                                 .findByIdempotencyKeyWithLock(request.getIdempotencyKey());
                 if (existing.isPresent()) {
-                        log.warn("Duplicate request detected: idempotencyKey={}", request.getIdempotencyKey());
+                        log.warn("Mükerrer istek tespit edildi: idempotencyKey={}", request.getIdempotencyKey());
                         return existing.get();
                 }
 
-                // 2. Validate FROM account
+                // 2. GÖNDEREN hesabı doğrula
                 AccountValidationResponse fromAccount = accountServiceClient
                                 .validateAccount(request.getFromAccountId());
                 if (!fromAccount.isValid()) {
                         throw new ValidationException("Invalid source account: " + request.getFromAccountId());
                 }
 
-                // 3. Validate TO account
+                // 3. ALICI hesabı doğrula
                 AccountValidationResponse toAccount = accountServiceClient.validateAccount(request.getToAccountId());
                 if (!toAccount.isValid()) {
                         throw new ValidationException("Invalid destination account: " + request.getToAccountId());
                 }
 
-                // 3.1. Prevent self-transfer (BUG FIX #3)
+                // 3.1. Kendine transfer engeli
                 if (request.getFromAccountId().equals(request.getToAccountId())) {
                         throw new ValidationException("Cannot transfer to the same account");
                 }
 
-                // 3.2. Validate currency match (BUG FIX #2)
+                // 3.2. Para birimi kontrolü
                 if (!fromAccount.getCurrency().equals(toAccount.getCurrency())) {
                         throw new ValidationException(
                                         String.format("Currency mismatch: source account is %s but destination is %s",
                                                         fromAccount.getCurrency(), toAccount.getCurrency()));
                 }
 
-                // 4. Check balance (optimistic check - Ledger is source of truth)
+                // 4. Bakiye kontrolü (Optimistic - Son söz Ledger'ın)
                 LedgerBalanceResponse balance = ledgerServiceClient.getAccountBalance(request.getFromAccountId());
                 if (balance.getAvailableBalance().compareTo(request.getAmount()) < 0) {
                         throw new InsufficientBalanceException("Insufficient balance");
                 }
 
-                // 5. Create transaction entity
+                // 5. İşlem kaydını oluştur
                 String transactionId = generateTransactionId();
                 String referenceNumber = generateReferenceNumber();
 
@@ -129,7 +129,7 @@ public class TransactionService {
                 transaction.setLedgerDates(LocalDate.now(), LocalDate.now());
                 transactionRepository.save(transaction);
 
-                // 6. Publish TransactionStartedEvent (SAGA initiation)
+                // 6. TransactionStartedEvent yayınla (SAGA başlat)
                 publishTransactionStartedEvent(transaction);
 
                 log.info("TRANSFER transaction created: id={}, status=PENDING", transactionId);
@@ -145,7 +145,7 @@ public class TransactionService {
                                 request.getCardId(), request.getAmount(), request.getAtmId(),
                                 request.getIdempotencyKey());
 
-                // 1. Idempotency check
+                // 1. Idempotency (Mükerrerlik) kontrolü
                 Optional<Transaction> existing = transactionRepository
                                 .findByIdempotencyKeyWithLock(request.getIdempotencyKey());
                 if (existing.isPresent()) {
@@ -153,13 +153,13 @@ public class TransactionService {
                         return existing.get();
                 }
 
-                // 2. Validate PIN
+                // 2. PIN doğrulama
                 boolean pinValid = cardServiceClient.validatePin(request.getCardId(), request.getPin());
                 if (!pinValid) {
                         throw new ValidationException("Invalid PIN");
                 }
 
-                // 3. Authorize card for withdrawal
+                // 3. Kartın çekim yetkisini kontrol et (Limit vs)
                 CardAuthorizationResponse cardAuth = cardServiceClient.authorizeCard(
                                 request.getCardId(),
                                 request.getAmount(),
@@ -172,13 +172,13 @@ public class TransactionService {
 
                 String accountId = cardAuth.getAccountId();
 
-                // 4. Check balance
+                // 4. Bakiye kontrolü
                 LedgerBalanceResponse balance = ledgerServiceClient.getAccountBalance(accountId);
                 if (balance.getAvailableBalance().compareTo(request.getAmount()) < 0) {
                         throw new InsufficientBalanceException("Insufficient balance");
                 }
 
-                // 5. Create transaction entity
+                // 5. İşlem kaydını oluştur
                 String transactionId = generateTransactionId();
                 String referenceNumber = generateReferenceNumber();
 
@@ -201,7 +201,7 @@ public class TransactionService {
                 transaction.setLedgerDates(LocalDate.now(), LocalDate.now());
                 transactionRepository.save(transaction);
 
-                // 6. Publish TransactionStartedEvent
+                // 6. Event yayınla
                 publishTransactionStartedEvent(transaction);
 
                 log.info("WITHDRAWAL transaction created: id={}, status=PENDING", transactionId);
@@ -217,7 +217,7 @@ public class TransactionService {
                                 request.getCardId(), request.getAmount(), request.getMerchantName(),
                                 request.getIdempotencyKey());
 
-                // 1. Idempotency check
+                // 1. Idempotency (Mükerrerlik) kontrolü
                 Optional<Transaction> existing = transactionRepository
                                 .findByIdempotencyKeyWithLock(request.getIdempotencyKey());
                 if (existing.isPresent()) {
@@ -225,7 +225,7 @@ public class TransactionService {
                         return existing.get();
                 }
 
-                // 2. Authorize card for purchase
+                // 2. Kartın harcama yetkisini kontrol et
                 CardAuthorizationResponse cardAuth = cardServiceClient.authorizeCard(
                                 request.getCardId(),
                                 request.getAmount(),
@@ -238,13 +238,13 @@ public class TransactionService {
 
                 String accountId = cardAuth.getAccountId();
 
-                // 3. Check balance
+                // 3. Bakiye kontrolü
                 LedgerBalanceResponse balance = ledgerServiceClient.getAccountBalance(accountId);
                 if (balance.getAvailableBalance().compareTo(request.getAmount()) < 0) {
                         throw new InsufficientBalanceException("Insufficient balance");
                 }
 
-                // 4. Create transaction entity
+                // 4. İşlem kaydını oluştur
                 String transactionId = generateTransactionId();
                 String referenceNumber = generateReferenceNumber();
 
@@ -268,7 +268,7 @@ public class TransactionService {
                 transaction.setLedgerDates(LocalDate.now(), LocalDate.now());
                 transactionRepository.save(transaction);
 
-                // 5. Publish TransactionStartedEvent
+                // 5. Event yayınla
                 publishTransactionStartedEvent(transaction);
 
                 log.info("PURCHASE transaction created: id={}, status=PENDING", transactionId);
@@ -282,7 +282,7 @@ public class TransactionService {
         private void publishTransactionStartedEvent(Transaction transaction) {
                 log.debug("Publishing TransactionStartedEvent: id={}", transaction.getId());
 
-                // Build ledger entries
+                // Ledger kayıtlarını hazırla
                 List<Map<String, Object>> entries = buildLedgerEntries(transaction);
 
                 outboxService.publishTransactionStarted(

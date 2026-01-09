@@ -18,9 +18,9 @@ import java.util.Map;
 
 /**
  * Hesap Yönetim Servisi (Core Business Logic)
- * 
- * Hesap yaşam döngüsünü (Açılış, Kapanış, Dondurma) yönetir.
- * Tüm işlemler Transactional'dır ve tutarlılık esastır.
+ *
+ * Hesap açılış, kapanış ve güncelleme süreçlerini yönetir.
+ * Transactional bütünlüğü garanti eder.
  */
 @Service
 @RequiredArgsConstructor
@@ -32,14 +32,13 @@ public class AccountService {
         private final OutboxService outboxService;
 
         /**
-         * Yeni bir hesap açar.
-         * 
+         * Yeni hesap açılışı.
+         *
          * Süreç:
-         * 1. Validasyon (Ürün var mı?)
-         * 2. Entity Üretimi (Unique IBAN)
-         * 3. Kayıt (DB Insert)
-         * 4. Event Fırlatma (Outbox Insert)
-         * Hepsi tek bir veritabanı transaction'ı içindedir (Atomicity).
+         * 1. Ürün validasyonu
+         * 2. Yeni IBAN üretimi
+         * 3. Kayıt (DB)
+         * 4. Event yayını (Outbox)
          */
         @Transactional
         public Account createAccount(CreateAccountRequest request) {
@@ -111,9 +110,7 @@ public class AccountService {
 
         /**
          * Hesap durumunu değiştirir (Freeze/Unfreeze/Close).
-         * 
-         * Hesap kapatılırken bakiye kontrolü yapılır.
-         * Sadece bakiyesi 0 olan hesaplar kapatılabilir.
+         * Hesap kapatılırken bakiye sıfır olmalıdır.
          */
         @Transactional
         public void changeStatus(String accountId, AccountStatus newStatus, String reason) {
@@ -149,9 +146,7 @@ public class AccountService {
         }
 
         /**
-         * Hesap detayını getirir.
-         * Transactional(readOnly = true): Hibernate'in Dirty Checking mekanizmasını
-         * kapatır, performans artar.
+         * Hesap detayını getirir (ReadOnly - Performanslı).
          */
         @Transactional(readOnly = true)
         public Account getAccount(String accountId) {
@@ -169,12 +164,9 @@ public class AccountService {
 
         /**
          * Bakiye Güncelleme (Ledger Event Handler)
-         * 
-         * Ledger Service'den gelen BalanceUpdatedEvent ile çağrılır.
-         * Account Service'deki bakiye projeksiyonunu günceller.
-         * 
-         * @param accountId  UUID of the account
-         * @param newBalance New balance from Ledger
+         *
+         * Ledger Service'den gelen bakiye değişimlerini (Eventual Consistency)
+         * buradaki projeksiyona yansıtır.
          */
         @Transactional
         public void updateBalance(String accountId, java.math.BigDecimal newBalance) {
@@ -190,10 +182,8 @@ public class AccountService {
         }
 
         /**
-         * Hesap Yapılandırmasını Günceller (PATCH - Deep Merge)
-         * 
-         * PATCH semantiği: Sadece verilen alanlar güncellenir, diğerleri korunur.
-         * Nested/İç içe yapılar da recursive merge edilir.
+         * Hesap yapılandırmasını günceller (Deep Merge).
+         * Sadece gönderilen alanlar değişir, diğerleri korunur.
          */
         @Transactional
         public void updateConfiguration(String accountId, java.util.Map<String, Object> configurations) {
@@ -231,16 +221,13 @@ public class AccountService {
         }
 
         /**
-         * Transaction Service için hesap validasyonu
-         * 
-         * Hesabın işlem yapabilir durumda olup olmadığını, ürün kurallarını
-         * ve kullanıcı yapılandırmasını döner.
-         * 
-         * Hem UUID hem de IBAN (accountNumber) kabul eder.
-         * IBAN formatındaysa (TR ile başlıyorsa), önce IBAN ile hesabı bulur.
-         * 
-         * @param accountIdOrIban Hesap ID (UUID) veya IBAN (accountNumber)
-         * @return Validation bilgileri (durum, limitler, özellikler)
+         * Transaction Service için hesap validasyonu.
+         *
+         * Hesabın limitlerini, statüsünü ve ürün kurallarını kontrol eder.
+         * ID (UUID) veya IBAN ile sorgulanabilir.
+         *
+         * @param accountIdOrIban Hesap ID veya IBAN
+         * @return Validasyon durumu
          */
         @Transactional(readOnly = true)
         public com.triobank.account.dto.response.AccountValidationResponse validateForTransaction(String accountIdOrIban) {

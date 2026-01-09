@@ -36,16 +36,16 @@ func (repo Repo) login(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	var data loginData
-	// in first the password will not be hashed, then we will hash it before write into the database
+	// Şifre ilk başta plain text gelir, veritabanına yazmadan önce hash'leyeceğiz
 
-	// the control of request body
+	// İstek gövdesini kontrol et
 	if err := json.NewDecoder(r.Body).Decode(&data); err != nil || (data.Password == "" || data.Tc == "") {
 		w.WriteHeader(http.StatusBadRequest)
 		_, _ = w.Write([]byte("the request body could not be decoded or the request may do not include password or tc fields"))
 		return
 	}
 
-	// Normalize TC: trim whitespace
+	// TC'yi temizle
 	data.Tc = strings.TrimSpace(data.Tc)
 
 	user, err := repo.DataBase.loginControl(ctx, data)
@@ -80,7 +80,7 @@ func (repo Repo) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err = repo.SessionManager.saveSessionId(ctx, user.Id, base64.URLEncoding.EncodeToString(sessionId), code.Int64()+1000)
-	// LOGGING FOR MANUAL VERIFICATION
+	// Manuel test için doğrulama kodunu logluyoruz
 	fmt.Printf("LOGIN Verification Code: %d\n", code.Int64()+1000)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -159,14 +159,14 @@ func (repo Repo) LoginConfirm(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("something went wrong in server"))
 		return
 	}
-	// Get user from DB to get UUID
+	// UUID almak için kullanıcıyı DB'den çekiyoruz
 	user, err := repo.DataBase.getUserById(ctx, userId)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte("could not find user"))
 		return
 	}
-	// access and refresh token will be created and stored
+	// Token çiftini oluşturup saklayalım
 	refreshToken, accessToken, err := repo.DataBase.createRefreshAndAccessToken(ctx, userId, user.UUID)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -230,7 +230,7 @@ func (repo Repo) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Normalize input data: trim and lowercase email
+	// Girdi verilerini standardize edelim (email küçük harf vs)
 	data.Tc = strings.TrimSpace(data.Tc)
 	data.Email = strings.TrimSpace(strings.ToLower(data.Email))
 	data.Name = strings.TrimSpace(data.Name)
@@ -299,7 +299,7 @@ func (repo Repo) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = repo.SessionManager.saveSessionId(ctx, user.Id, base64.URLEncoding.EncodeToString(sessionId), code.Int64()+1000)
-	// LOGGING FOR MANUAL VERIFICATION
+	// Manuel test için doğrulama kodunu logluyoruz
 	fmt.Printf("REGISTER Verification Code: %d\n", code.Int64()+1000)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -409,7 +409,7 @@ func (repo Repo) RegisterConfirm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Send Kafka event - SendKafkaEvent will handle marshaling
+	// Kafka event'i gönder (marshalling fonksiyon içinde halledilir)
 	err = SendKafkaEvent(repo.Producer, ctx, user.UUID, user, "UserCreated", "UserCreated")
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -727,62 +727,62 @@ func (repo Repo) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 }
 
 func (repo Repo) UpdateUserContact(w http.ResponseWriter, r *http.Request) {
-    defer r.Body.Close()
+	defer r.Body.Close()
 
-    if r.Method != http.MethodPost && r.Method != http.MethodPut {
-        w.WriteHeader(http.StatusMethodNotAllowed)
-        return
-    }
+	if r.Method != http.MethodPost && r.Method != http.MethodPut {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
 
-    token := r.Header.Get("Authorization")
-    if token == "" {
-        w.WriteHeader(http.StatusBadRequest)
-        return
-    }
+	token := r.Header.Get("Authorization")
+	if token == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
 
-    ctx, cancel := context.WithTimeout(r.Context(), time.Second*5)
-    defer cancel()
+	ctx, cancel := context.WithTimeout(r.Context(), time.Second*5)
+	defer cancel()
 
-    if !strings.HasPrefix(token, "Bearer ") {
-        w.WriteHeader(http.StatusUnauthorized)
-        return
-    }
+	if !strings.HasPrefix(token, "Bearer ") {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
 
-    AccessToken := strings.TrimPrefix(token, "Bearer ")
+	AccessToken := strings.TrimPrefix(token, "Bearer ")
 
-    userUuid, err := pkg.ValidateAccessToken(AccessToken)
-    if err != nil {
-        w.WriteHeader(http.StatusUnauthorized)
-        return
-    }
+	userUuid, err := pkg.ValidateAccessToken(AccessToken)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
 
-    var data updateData
-    if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-        w.WriteHeader(http.StatusBadRequest)
-        return
-    }
+	var data updateData
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
 
-    userId, err := repo.DataBase.getUserIdByUUID(ctx, userUuid)
-    if err != nil {
-        w.WriteHeader(http.StatusNotFound)
-        return
-    }
+	userId, err := repo.DataBase.getUserIdByUUID(ctx, userUuid)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
 
-    // Normalize email and phone before update
-    data.Email = strings.TrimSpace(strings.ToLower(data.Email))
-    data.Phone = strings.TrimSpace(data.Phone)
+	// Güncelleme öncesi email ve telefonu temizle
+	data.Email = strings.TrimSpace(strings.ToLower(data.Email))
+	data.Phone = strings.TrimSpace(data.Phone)
 
-    err = repo.DataBase.updateUserContact(ctx, userId, data.Email, data.Phone)
-    if err != nil {
-        w.WriteHeader(http.StatusInternalServerError)
-        return
-    }
+	err = repo.DataBase.updateUserContact(ctx, userId, data.Email, data.Phone)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 
-    w.WriteHeader(http.StatusOK)
-    _, _ = w.Write([]byte("user contact updated"))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("user contact updated"))
 }
 
-// ForgotPasswordInitiate initiates password reset process
+// ForgotPasswordInitiate şifre sıfırlama sürecini başlatır
 func (repo Repo) ForgotPasswordInitiate(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 	if r.Method != http.MethodPost {
@@ -965,8 +965,8 @@ func (repo Repo) ForgotPasswordReset(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var data struct {
-		SessionId  string `json:"session-id"`
-		Code       string `json:"code"`
+		SessionId   string `json:"session-id"`
+		Code        string `json:"code"`
 		NewPassword string `json:"new_password"`
 	}
 

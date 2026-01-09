@@ -24,7 +24,7 @@ func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
 
 func middleWare(f http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// middleware layer that implement logging
+		// Basit logging ve güvenlik katmanı
 
 		if r.Header.Get("X-Internal-Secret") == os.Getenv("SECRET_KEY") {
 			f(w, r)

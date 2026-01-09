@@ -29,7 +29,7 @@ func main() {
 		log.Fatal("sql db connection is not done: ", err)
 	}
 
-	// Initialize database (create tables if they don't exist)
+	// Veritabanını başlat (tablolar yoksa oluşturur)
 	if err := internal.InitializeDatabase(sqlDb); err != nil {
 		log.Fatal("database initialization failed: ", err)
 	}
@@ -40,7 +40,7 @@ func main() {
 	client := http.Client{Timeout: 8 * time.Second}
 	repo.Client = &client
 
-	// Initialize Account Service client
+	// Account Service istemcisini hazırla
 	accountServiceURL := config.GetEnv("ACCOUNT_SERVICE_URL")
 	if accountServiceURL != "" {
 		repo.AccountClient = internal.NewAccountClient(accountServiceURL, &client)
@@ -49,15 +49,15 @@ func main() {
 		log.Println("ACCOUNT_SERVICE_URL not set, account creation will be skipped")
 	}
 
-	// Context for graceful shutdown
+	// Graceful shutdown için context
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Start Kafka consumers in background
+	// Arka planda Kafka consumer'ları başlat
 	go internal.ConsumeUserCreatedEvents(ctx, &repo)
 	go internal.ConsumeUserDeletedEvents(ctx, &repo)
 
-	// Handle shutdown signals
+	// Kapanma sinyallerini dinle
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 

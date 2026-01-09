@@ -23,17 +23,10 @@ import java.time.LocalDate;
 import java.util.*;
 
 /**
- * Ledger Service - Ana Muhasebe Servisi
- * 
- * Burası işin kalbi (Core Logic).
- * Transaction Service'ten gelen olayları alıp deftere işliyoruz.
- * Ayrıca SAGA pattern gereği "tamam", "iptal" gibi cevapları da buradan
- * yönetiyoruz.
- * 
- * En Kritik Nokta: Concurrency.
- * Aynı hesaba aynı anda işlem gelirse bakiye patlamasın diye
- * Pessimistic Lock (Row Lock) kullanıyoruz.
- * "Önce kilitle, sonra güncelle."
+ * Ledger Service (Core Logic)
+ *
+ * Transaction eventlerini işler, SAGA süreçlerini yönetir ve
+ * concurrency güvenliğini sağlar (Pessimistic Locking ile).
  */
 @Service
 @RequiredArgsConstructor
@@ -47,12 +40,9 @@ public class LedgerService {
         private final OutboxService outboxService;
 
         /**
-         * Transaction Service'ten gelen "TransactionStarted" event'ini işler.
-         * 
-         * SAGA Step 1: Kaydı oluştur ve bakiyeleri güncelle.
-         * Idempotency: Duplicate key (transactionId) gelirse
-         * DataIntegrityViolationException fırlatılır.
-         * Bunu yakalayıp graceful şekilde işlemeliyiz.
+         * TransactionStarted eventini işler.
+         * SAGA Step 1: Kayıt oluştur ve bakiye güncelle.
+         * Duplicate transactionId gelirse idempotent davranır (hata fırlatmaz, loglar).
          */
         @Transactional
         public void recordTransaction(com.triobank.ledger.dto.event.incoming.TransactionStartedEvent request) {
@@ -106,7 +96,7 @@ public class LedgerService {
         }
 
         /**
-         * İşlem iptali (Reversal) - SAGA Compensation
+         * Reversal İşlemi (SAGA Compensation)
          */
         @Transactional
         public void reverseTransaction(
@@ -239,10 +229,8 @@ public class LedgerService {
         }
 
         /**
-         * Hesap bakiyelerini günceller.
-         * 
-         * EN KRİTİK METOD BURASI.
-         * Pessimistic Locking ile row-lock alıyoruz.
+         * Bakiyeleri günceller.
+         * Kritik: Row-lock (pessimistic) kullanarak çakışmayı önler.
          */
         private List<BalanceUpdateDto> updateBalances(List<LedgerEntry> entries) {
                 Map<String, BigDecimal> deltaMap = new HashMap<>();
@@ -293,8 +281,8 @@ public class LedgerService {
         }
 
         /**
-         * Create initial balance for new account (0.00)
-         * Called when AccountCreatedEvent is received
+         * Yeni hesap için başlangıç bakiyesi (0.00) oluşturur.
+         * AccountCreatedEvent geldiğinde tetiklenir.
          */
         @Transactional
         public void createInitialBalance(String accountId, String currency) {

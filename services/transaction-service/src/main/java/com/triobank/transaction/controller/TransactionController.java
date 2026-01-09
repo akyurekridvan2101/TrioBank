@@ -25,17 +25,15 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Transaction Management API Controller
- * 
- * REST endpoints for transaction operations (TRANSFER, WITHDRAWAL, PURCHASE).
- * Follows Account/Card controller patterns for consistency.
- * 
- * Architecture:
- * - Controller: HTTP layer, validation, response formatting
- * - Service: Business logic, orchestration, SAGA coordination
- * - Repository: Data access
- * 
- * Pattern: Copied from AccountController and CardController
+ * İşlem (Transaction) Yönetim API Controller
+ *
+ * Para transferi, para çekme ve harcama işlemlerini yönetir.
+ * Account ve Card controller ile benzer yapıda kurgulandı.
+ *
+ * Mimari:
+ * - Controller: HTTP katmanı, validasyon, response formatlama
+ * - Service: İş mantığı, orkestrasyon, SAGA koordinasyonu
+ * - Repository: Veri erişimi
  */
 @RestController
 @RequestMapping("/v1/transactions")
@@ -51,13 +49,13 @@ public class TransactionController {
     // ============================================
 
     /**
-     * [POST] Create Transfer Transaction
-     * 
-     * Account-to-account money transfer.
-     * Validates both accounts, checks balance, initiates SAGA.
-     * 
-     * @param request Transfer details
-     * @return Created transaction with PENDING status
+     * [POST] Transfer İşlemi Oluştur
+     *
+     * Hesaptan hesaba para transferi (EFT/Havale gibi).
+     * Her iki hesabı doğrular, bakiyeyi kontrol eder ve SAGA sürecini başlatır.
+     *
+     * @param request Transfer detayları
+     * @return Oluşturulan işlem (PENDING statüsünde)
      */
     @PostMapping("/transfer")
     @Operation(summary = "Create transfer transaction", description = "Transfers money from one account to another. Validates accounts and balance before initiating SAGA.")
@@ -70,13 +68,13 @@ public class TransactionController {
     }
 
     /**
-     * [POST] Create Withdrawal Transaction
-     * 
-     * ATM cash withdrawal using debit card.
-     * Validates card, PIN, daily limit, account balance.
-     * 
-     * @param request Withdrawal details
-     * @return Created transaction with PENDING status
+     * [POST] Para Çekme İşlemi (ATM)
+     *
+     * Banka kartı ile ATM'den para çekme senaryosu.
+     * Kartı, PIN'i, günlük limiti ve bakiyeyi doğrular.
+     *
+     * @param request Çekim detayları
+     * @return Oluşturulan işlem (PENDING statüsünde)
      */
     @PostMapping("/withdrawal")
     @Operation(summary = "Create withdrawal transaction", description = "Processes ATM withdrawal. Validates card, PIN, daily limits, and account balance.")
@@ -89,13 +87,13 @@ public class TransactionController {
     }
 
     /**
-     * [POST] Create Purchase Transaction
-     * 
-     * Merchant payment via card (POS or online).
-     * Validates card, authorization, account balance.
-     * 
-     * @param request Purchase details
-     * @return Created transaction with PENDING status
+     * [POST] Alışveriş İşlemi (Purchase)
+     *
+     * Kart ile yapılan harcama (POS veya Online).
+     * Kart yetkisini (limit vs) ve hesap bakiyesini kontrol eder.
+     *
+     * @param request Harcama detayları
+     * @return Oluşturulan işlem (PENDING statüsünde)
      */
     @PostMapping("/purchase")
     @Operation(summary = "Create purchase transaction", description = "Processes card purchase at merchant. Validates card authorization and account balance.")
@@ -112,10 +110,10 @@ public class TransactionController {
     // ============================================
 
     /**
-     * [GET] Get Transaction by ID
-     * 
-     * @param id Transaction ID
-     * @return Transaction details
+     * [GET] İşlem Detayı Getir
+     *
+     * @param id İşlem ID
+     * @return İşlem detayları
      */
     @GetMapping("/{id}")
     @Operation(summary = "Get transaction details", description = "Retrieves details of a specific transaction by ID")
@@ -125,12 +123,12 @@ public class TransactionController {
     }
 
     /**
-     * [GET] Get Transaction by Idempotency Key
-     * 
-     * For duplicate detection and idempotent request handling.
-     * 
-     * @param idempotencyKey Unique request identifier
-     * @return Transaction if exists
+     * [GET] Idempotency Key ile Getir
+     *
+     * Mükerrer işlem kontrolü için kullanılır.
+     *
+     * @param idempotencyKey İsteğe özel tekil anahtar
+     * @return Varsa işlemi döner
      */
     @GetMapping("/by-idempotency-key/{idempotencyKey}")
     @Operation(summary = "Get transaction by idempotency key", description = "Retrieves transaction by idempotency key for duplicate detection")
@@ -142,12 +140,12 @@ public class TransactionController {
     }
 
     /**
-     * [GET] Get Transaction by Reference Number
-     * 
-     * For customer support and transaction lookup.
-     * 
-     * @param referenceNumber Transaction reference number
-     * @return Transaction if exists
+     * [GET] Referans Numarası ile Getir
+     *
+     * Müşteri hizmetleri ve işlem sorgulama ekranları için.
+     *
+     * @param referenceNumber İşlem referans no
+     * @return Varsa işlemi döner
      */
     @GetMapping("/by-reference/{referenceNumber}")
     @Operation(summary = "Get transaction by reference number", description = "Retrieves transaction by reference number for customer lookup")
@@ -163,20 +161,19 @@ public class TransactionController {
     // ============================================
 
     /**
-     * [GET] Get Account Transactions
-     * 
-     * Lists all transactions for an account (sender or receiver).
-     * Supports pagination and optional status filter.
-     * 
-     * Examples:
+     * [GET] Hesaba Ait İşlemler
+     *
+     * Bir hesabın tüm işlemlerini listeler (gönderen veya alan olarak).
+     * Sayfalama ve opsiyonel statü filtresi destekler.
+     *
+     * Örnekler:
      * - /v1/transactions?accountId=acc-123
      * - /v1/transactions?accountId=acc-123&status=COMPLETED
-     * - /v1/transactions?accountId=acc-123&page=0&size=20
-     * 
-     * @param accountId Account ID (required)
-     * @param status    Optional status filter
-     * @param pageable  Pagination parameters
-     * @return Paginated transaction list
+     *
+     * @param accountId Hesap ID (Zorunlu)
+     * @param status    Statü filtresi (Opsiyonel)
+     * @param pageable  Sayfalama parametreleri
+     * @return Sayfalı işlem listesi
      */
     @GetMapping
     @Operation(summary = "Get account transactions", description = "Lists transactions for an account with optional status filter and pagination")
@@ -197,14 +194,14 @@ public class TransactionController {
     }
 
     /**
-     * [GET] Get Card Transactions
-     * 
-     * Lists all transactions for a specific card.
-     * 
-     * @param cardId   Card ID
-     * @param status   Optional status filter
-     * @param pageable Pagination parameters
-     * @return Paginated transaction list
+     * [GET] Karta Ait İşlemler
+     *
+     * Belirli bir kartla yapılan işlemleri listeler.
+     *
+     * @param cardId   Kart ID
+     * @param status   Statü filtresi
+     * @param pageable Sayfalama
+     * @return Sayfalı işlem listesi
      */
     @GetMapping("/by-card")
     @Operation(summary = "Get card transactions", description = "Lists transactions for a specific card with optional status filter")
@@ -225,13 +222,13 @@ public class TransactionController {
     }
 
     /**
-     * [GET] Get User-Initiated Transactions
-     * 
-     * Lists transactions initiated by a specific user.
-     * 
-     * @param initiatorId User/initiator ID
-     * @param pageable    Pagination parameters
-     * @return Paginated transaction list
+     * [GET] Kullanıcının Başlattığı İşlemler
+     *
+     * Belirli bir kullanıcının başlattığı işlemleri listeler.
+     *
+     * @param initiatorId Kullanıcı ID
+     * @param pageable    Sayfalama
+     * @return Sayfalı işlem listesi
      */
     @GetMapping("/by-initiator")
     @Operation(summary = "Get user-initiated transactions", description = "Lists transactions initiated by a specific user")
@@ -244,12 +241,12 @@ public class TransactionController {
     }
 
     /**
-     * [GET] Get Pending Transactions for User
-     * 
-     * Lists PENDING transactions for monitoring/timeout detection.
-     * 
-     * @param initiatorId User ID
-     * @return List of pending transactions
+     * [GET] Bekleyen (Pending) İşlemler
+     *
+     * Timeout tespiti ve izleme için PENDING statüsündeki işlemleri döner.
+     *
+     * @param initiatorId Kullanıcı ID
+     * @return Bekleyen işlemler listesi
      */
     @GetMapping("/pending")
     @Operation(summary = "Get pending transactions", description = "Lists pending transactions for monitoring and timeout detection")
@@ -269,13 +266,13 @@ public class TransactionController {
     // ============================================
 
     /**
-     * [GET] Get Failed Transactions
-     * 
-     * For operations team to monitor failures.
-     * 
-     * @param reason   Optional failure reason filter
-     * @param pageable Pagination parameters
-     * @return Paginated failed transaction list
+     * [GET] Hatalı İşlemler
+     *
+     * Operasyon ekibinin hataları izlemesi için.
+     *
+     * @param reason   Hata sebebi filtresi (Opsiyonel)
+     * @param pageable Sayfalama
+     * @return Hatalı işlem listesi
      */
     @GetMapping("/failed")
     @Operation(summary = "Get failed transactions", description = "Lists failed transactions with optional reason filter for operations monitoring")
@@ -288,11 +285,11 @@ public class TransactionController {
     }
 
     /**
-     * [GET] Get Transaction Statistics
-     * 
-     * Returns transaction counts by status/type for dashboard.
-     * 
-     * @return Statistics map
+     * [GET] İşlem İstatistikleri
+     *
+     * Dashboard için statü/tip bazlı işlem sayılarını döner.
+     *
+     * @return İstatistik map'i
      */
     @GetMapping("/statistics")
     @Operation(summary = "Get transaction statistics", description = "Returns transaction counts by status and type for monitoring dashboard")

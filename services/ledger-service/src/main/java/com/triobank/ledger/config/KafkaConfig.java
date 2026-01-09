@@ -19,11 +19,10 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Kafka Tüketici (Consumer) Ayarları
- * 
- * Burada her event tipi için ayrı birer listener factory tanımlıyoruz.
- * Böylece tip güvenliğini garanti altına almış oluyoruz (CAST hatası olmaz).
- * Ayrıca global hata yakalama (Error Handler) mekanizması da burada kurulu.
+ * Kafka Consumer Konfigürasyonu
+ *
+ * Listener factory tanımları ve tip güvenli deserilization ayarları burada yapılır.
+ * Ayrıca global hata yönetimi (Error Handler) de burada yapılandırılır.
  */
 @Configuration
 @EnableKafka
@@ -57,21 +56,20 @@ public class KafkaConfig {
     }
 
     /**
-     * Global Hata Yönetimi (Error Handler)
-     * 
-     * Veritabanı anlık gittiğinde veya ağ koptuğunda mesajı hemen kaybetmemek için
-     * 3 kere tekrar deniyoruz (1 saniye arayla).
-     * Eğer yine olmazsa logluyoruz (İleride Dead Letter Queue eklenebilir).
+     * Global Hata Yönetimi
+     *
+     * Bağlantı koparsa veya geçici hatalarda mesajı kaybetmemek için
+     * 1'er saniye arayla 3 kez tekrar dener.
      */
     @Bean
     public org.springframework.kafka.listener.DefaultErrorHandler errorHandler() {
-        // 1 saniye bekle, 3 kere dene
+        // 1 sn arayla 3 deneme
         org.springframework.util.backoff.FixedBackOff backOff = new org.springframework.util.backoff.FixedBackOff(1000L,
                 3);
 
         org.springframework.kafka.listener.DefaultErrorHandler errorHandler = new org.springframework.kafka.listener.DefaultErrorHandler(
                 (record, exception) -> {
-                    // 3 denemeden sonra hala hata varsa buraya düşer.
+                    // 3 deneme başarısızsa buraya düşer.
                     System.err.println("3 deneme başarısız, mesaj işlenemedi: " + record.value());
                 }, backOff);
 

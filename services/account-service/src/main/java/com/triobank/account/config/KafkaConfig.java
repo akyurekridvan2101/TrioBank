@@ -20,11 +20,10 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Kafka Tüketici (Consumer) Ayarları
- * 
- * Ledger Service'ten kopyalanmıştır ve Account Service ihtiyaçlarına göre
- * revize edilmiştir.
- * Type-safe deserialization ve Global Error Handler içerir.
+ * Kafka Consumer Konfigürasyonu
+ *
+ * Ledger Service ile benzer yapıda.
+ * Tip güvenli deserialization ve global hata yönetimi içerir.
  */
 @Configuration
 @EnableKafka
@@ -59,7 +58,7 @@ public class KafkaConfig {
 
     /**
      * Global Hata Yönetimi
-     * 3 deneme (retry) sonrası loglama.
+     * 3 deneme (retry) sonrası log basar.
      */
     @Bean
     public org.springframework.kafka.listener.DefaultErrorHandler errorHandler() {

@@ -11,63 +11,51 @@ import (
 // ==========================================
 // AUTH MIDDLEWARE
 // ==========================================
-// Bu middleware, protected endpoint'lere gelen isteklerde
-// kullanıcının geçerli bir token'a sahip olup olmadığını kontrol eder.
-//
-// AKIŞ:
-// 1. Request gelir → Authorization header'ı var mı?
-// 2. Header "Bearer <token>" formatında mı?
-// 3. Token geçerli mi? (Auth service'e sorulur)
-// 4. Geçerliyse → user_id context'e eklenir, request devam eder
-// 5. Geçersizse → 401 Unauthorized döner
+// Korumalı endpointler için token doğrulama mekanizması.
+// Header'dan token'ı alır, Auth servisine sorar, geçerliyse UserID'yi işler.
 // ==========================================
 
-// contextKey - Context'e değer eklerken kullanılan özel tip
-// String yerine özel tip kullanmak Go'da best practice'tir
+// Context key tipi (String yerine type kullanmak daha güvenli)
 type contextKey string
 
-// UserIDKey - User ID'yi context'te saklamak için anahtar
+// User ID'yi context'te saklamak için anahtar
 const UserIDKey contextKey = "user_id"
 
-// AuthMiddleware - Token doğrulama için kullanılan struct
+// AuthMiddleware struct
 type AuthMiddleware struct {
-	AuthClient *auth.AuthsClient // Auth service ile iletişim kuran client
+	AuthClient *auth.AuthsClient // Auth servis client'ı
 }
 
-// NewAuthMiddleware - Yeni AuthMiddleware oluşturur
+// NewAuthMiddleware constructor
 func NewAuthMiddleware(client *auth.AuthsClient) *AuthMiddleware {
 	return &AuthMiddleware{
 		AuthClient: client,
 	}
 }
 
-// RequireAuth - Protected endpoint'ler için middleware fonksiyonu
-//
-// Kullanım:
-//
-//	mux.Handle("/protected", authMiddleware.RequireAuth(myHandler))
+// RequireAuth: Endpoint koruma middleware'i
 func (am *AuthMiddleware) RequireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
-		// ADIM 1: Authorization header'ı al
+		// 1. Authorization header kontrolü
 		authHeader := r.Header.Get("Authorization")
 
-		// Header yoksa → 401 dön
+		// Header yoksa 401
 		if authHeader == "" {
 			http.Error(w, "Authorization header gerekli", http.StatusUnauthorized)
 			return
 		}
 
-		// ADIM 2: "Bearer " ile başlıyor mu kontrol et
+		// 2. Format kontrolü (Bearer)
 		if !strings.HasPrefix(authHeader, "Bearer ") {
 			http.Error(w, "Geçersiz token formatı", http.StatusUnauthorized)
 			return
 		}
 
-		// ADIM 3: "Bearer " kısmını çıkar, sadece token'ı al
+		// 3. Token'ı ayıkla
 		token := strings.TrimPrefix(authHeader, "Bearer ")
 
-		// ADIM 4: Token'ı auth service'den doğrula
+		// 4. Doğrulama (Auth Service)
 		userId, err := am.AuthClient.ValidateToken(r.Context(), token)
 		if err != nil {
 			// Token geçersiz veya süresi dolmuş
@@ -75,14 +63,13 @@ func (am *AuthMiddleware) RequireAuth(next http.Handler) http.Handler {
 			return
 		}
 
-		// ADIM 5: User ID'yi context'e ekle
-		// Bu sayede sonraki handler'lar user_id'ye erişebilir
+		// 5. UserID'yi context'e at
 		ctx := context.WithValue(r.Context(), UserIDKey, userId)
 
-		// ADIM 6: X-User-ID header'ı downstream servislere forward et
+		// 6. X-User-ID header'ı ekle (diğer servisler için)
 		r.Header.Set("X-User-ID", userId)
 
-		// ADIM 7: Sonraki handler'a devam et
+		// 7. Devam et
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

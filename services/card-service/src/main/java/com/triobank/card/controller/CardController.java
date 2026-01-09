@@ -25,10 +25,10 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Card Management API Controller
- * 
- * REST endpoints for card issuance and management.
- * Follows the same pattern as AccountController for consistency.
+ * Kart Yönetim API Controller
+ *
+ * Kart basım (issue) ve yönetim endpointleri.
+ * AccountController ile tutarlı yapıda tasarlandı.
  */
 @RestController
 @RequestMapping("/v1/cards")
@@ -40,7 +40,7 @@ public class CardController {
     private final CardMapper cardMapper;
 
     /**
-     * [POST] Issue Debit Card
+     * [POST] Banka Kartı (Debit) Oluştur
      */
     @PostMapping("/debit")
     @Operation(summary = "Issue debit card", description = "Creates a new debit card linked to an account")
@@ -51,7 +51,7 @@ public class CardController {
     }
 
     /**
-     * [POST] Issue Credit Card
+     * [POST] Kredi Kartı Oluştur
      */
     @PostMapping("/credit")
     @Operation(summary = "Issue credit card", description = "Creates a new credit card linked to an account")
@@ -62,7 +62,7 @@ public class CardController {
     }
 
     /**
-     * [POST] Issue Virtual Card
+     * [POST] Sanal Kart Oluştur
      */
     @PostMapping("/virtual")
     @Operation(summary = "Issue virtual card", description = "Creates a new virtual card for online transactions")
@@ -73,7 +73,7 @@ public class CardController {
     }
 
     /**
-     * [GET] Get Card Details
+     * [GET] Kart Detayı Getir
      */
     @GetMapping("/{id}")
     @Operation(summary = "Get card details", description = "Retrieves details of a specific card")
@@ -83,14 +83,12 @@ public class CardController {
     }
 
     /**
-     * [GET] Get Cards by Customer or Account
-     * 
-     * Examples:
-     * - /v1/cards?customerId=cust-123 → All cards for customer
-     * - /v1/cards?customerId=cust-123&cardType=DEBIT → Only debit cards
-     * - /v1/cards?customerId=cust-123&cardType=DEBIT&cardType=CREDIT → Debit and
-     * credit cards
-     * - /v1/cards?accountId=acc-456 → All cards for specific account
+     * [GET] Müşteri veya Hesaba ait kartları listele
+     *
+     * Örnekler:
+     * - /v1/cards?customerId=cust-123 -> Müşterinin tüm kartları
+     * - /v1/cards?customerId=...&cardType=DEBIT -> Sadece debit kartlar
+     * - /v1/cards?accountId=acc-456 -> Hesaba bağlı kartlar
      */
     @GetMapping
     @Operation(summary = "Get cards by customer or account", description = "Lists cards filtered by customerId (with optional cardType filter) or accountId")
@@ -102,10 +100,10 @@ public class CardController {
         List<Card> cards;
 
         if (customerId != null) {
-            // Get cards by customerId with optional cardType filter
+            // CustomerID'ye göre getir (opsiyonel tip filtresi)
             cards = cardService.getCardsByCustomer(customerId, cardType);
         } else if (accountId != null) {
-            // Get cards by accountId (existing functionality)
+            // AccountID'ye göre getir
             cards = cardService.getCardsByAccount(accountId, cardType);
         } else {
             throw new IllegalArgumentException("Either customerId or accountId is required");
@@ -119,7 +117,7 @@ public class CardController {
     }
 
     /**
-     * [PATCH] Block Card
+     * [PATCH] Kartı Bloke Et
      */
     @PatchMapping("/{id}/block")
     @Operation(summary = "Block card", description = "Blocks a card with a reason")
@@ -132,7 +130,7 @@ public class CardController {
     }
 
     /**
-     * [PATCH] Activate Card
+     * [PATCH] Kartı Aktifleştir
      */
     @PatchMapping("/{id}/activate")
     @Operation(summary = "Activate card", description = "Activates a blocked or inactive card")
@@ -142,10 +140,10 @@ public class CardController {
     }
 
     /**
-     * [POST] Authorize Transaction
-     * 
-     * Validates if card can be used for a transaction.
-     * Called by Transaction Service before processing payment.
+     * [POST] İşlem Onayı (Authorize)
+     *
+     * Kartın bu işlem için uygun olup olmadığını (limit, status) kontrol eder.
+     * Transaction Service tarafından ödeme öncesi çağrılır.
      */
     @PostMapping("/{id}/authorize")
     @Operation(summary = "Authorize transaction", description = "Validates card for transaction. Returns account ID if authorized.")
@@ -167,7 +165,7 @@ public class CardController {
     }
 
     /**
-     * [POST] Validate PIN
+     * [POST] PIN Doğrulama
      */
     @PostMapping("/{id}/validate-pin")
     @Operation(summary = "Validate PIN", description = "Validates card PIN for authentication")

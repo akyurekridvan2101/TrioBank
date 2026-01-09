@@ -12,7 +12,7 @@ import (
 	"github.com/TrioBank/triobank-platform/microservices/api-gateway/internal/proxy"
 	httpSwagger "github.com/swaggo/http-swagger"
 
-	_ "github.com/TrioBank/triobank-platform/microservices/api-gateway/docs" // Auto-generated docs
+	_ "github.com/TrioBank/triobank-platform/microservices/api-gateway/docs" // Swagger docs
 )
 
 // @title TrioBank API Gateway
@@ -66,7 +66,8 @@ func main() {
 	// ========================================
 
 	// ------------------------------------------
-	// PUBLIC ENDPOINTS (Herkese açık) - /api prefix
+	// ------------------------------------------
+	// Public Endpoint'ler (Giriş gerektirmez)
 	// ------------------------------------------
 
 	http.Handle("/api/auth/login",
@@ -81,7 +82,7 @@ func main() {
 	http.Handle("/api/auth/register/confirm",
 		rateLimiter.IPRateLimit(time.Minute, 20)(serviceProxy.ProxyToAuth()))
 
-	// Password reset endpoints (public, no auth required)
+	// Şifre sıfırlama işlemleri (login gerektirmez)
 	http.Handle("/api/auth/forgot-password/initiate",
 		rateLimiter.IPRateLimit(time.Minute, 10)(serviceProxy.ProxyToAuth()))
 
@@ -97,7 +98,7 @@ func main() {
 	http.Handle("/api/auth/me", serviceProxy.ProxyToAuth())
 
 	// ------------------------------------------
-	// PROTECTED ENDPOINTS (Giriş gerekli) - /api prefix
+	// Korumalı Alan (/api prefix) - Login şart
 	// ------------------------------------------
 
 	http.Handle("/api/auth/password-change",
@@ -116,7 +117,7 @@ func main() {
 				serviceProxy.ProxyToAuth())))
 
 	// ------------------------------------------
-	// CLIENT SERVICE ENDPOINTS (Giriş gerekli) - /api prefix
+	// Client Service Endpoint'leri
 	// ------------------------------------------
 
 	// GET /api/clients - Client listesi
@@ -132,7 +133,7 @@ func main() {
 				serviceProxy.ProxyToClient())))
 
 	// ------------------------------------------
-	// LEDGER SERVICE ENDPOINTS (Giriş gerekli)
+	// Ledger (Muhasebe) İşlemleri
 	// ------------------------------------------
 
 	// GET /api/v1/ledger/accounts/{accountId}/statement - Hesap hareketleri
@@ -148,7 +149,7 @@ func main() {
 				serviceProxy.ProxyToLedger())))
 
 	// ------------------------------------------
-	// ACCOUNT SERVICE ENDPOINTS (Giriş gerekli) - /api prefix
+	// Account (Hesap) İşlemleri
 	// ------------------------------------------
 
 	// GET /api/v1/accounts?customerId=X - Müşteri hesapları listesi
@@ -168,7 +169,7 @@ func main() {
 	// ------------------------------------------
 
 	// ------------------------------------------
-	// CARD SERVICE ENDPOINTS (Giriş gerekli) - /api prefix
+	// Card (Kart) İşlemleri
 	// ------------------------------------------
 
 	// POST /api/v1/cards/debit - Banka kartı çıkar
@@ -202,7 +203,7 @@ func main() {
 				serviceProxy.ProxyToCard())))
 
 	// ------------------------------------------
-	// TRANSACTION SERVICE ENDPOINTS (Giriş gerekli) - /api prefix
+	// Transaction (Transfer) İşlemleri
 	// ------------------------------------------
 
 	// POST /api/v1/transactions/transfer - Para transferi
@@ -254,14 +255,14 @@ func main() {
 
 	// 404 Handler - Route bulunamazsa
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// /api/* path'leri için özel 404 mesajı
+		// /api/* altında eşleşmeyen bir route varsa özel JSON dönelim
 		if len(r.URL.Path) >= 4 && r.URL.Path[:4] == "/api" {
 			log.Printf("[404] API route not found: %s %s", r.Method, r.URL.Path)
 			w.WriteHeader(http.StatusNotFound)
 			w.Write([]byte(`{"error":"API endpoint not found"}`))
 			return
 		}
-		// Diğer path'ler için genel 404
+		// Diğer path'ler için standart 404
 		log.Printf("[404] Route not found: %s %s", r.Method, r.URL.Path)
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte("404 page not found"))

@@ -9,21 +9,17 @@ import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 
 /**
- * Card Mapper - MapStruct DTOConverter
- * 
- * Converts Card entities to Response DTOs.
- * MapStruct automatically generates implementation code at compile time.
- * 
- * Pattern copied from Account Service for consistency.
+ * Card Mapper (MapStruct)
+ *
+ * Entity -> DTO dönüşümleri. MapStruct compile-time'da kod üretir.
+ * Account Service ile aynı yapıda.
  */
 @Mapper(componentModel = "spring")
 public interface CardMapper {
 
     /**
-     * Maps Card (base) to CardResponse with polymorphic dispatch
-     * CRITICAL: number field populated based on card type:
-     * - Virtual cards: full card number (unmasked)
-     * - Other cards: masked number
+     * Kart tipine göre (Polymorphic) doğru response'a çevirir.
+     * KRİTİK: Sanal kartta tam numara dönerken, diğerlerinde maskeli döner.
      */
     default CardResponse toResponse(Card card) {
         if (card instanceof VirtualCard) {
@@ -37,8 +33,8 @@ public interface CardMapper {
     }
 
     /**
-     * Base mapping for generic Card (fallback)
-     * number = maskedNumber for non-virtual cards
+     * Genel kart mapping (fallback).
+     * Default olarak maskeli numara döner.
      */
     @Mapping(target = "cardType", expression = "java(card.getCardType().name())")
     @Mapping(target = "number", source = "maskedNumber")
@@ -47,8 +43,7 @@ public interface CardMapper {
     CardResponse toBaseResponse(Card card);
 
     /**
-     * Maps DebitCard to DebitCardResponse
-     * number = maskedNumber (always masked for debit cards)
+     * Debit kart mapping: Numara her zaman maskeli.
      */
     @Mapping(target = "cardType", expression = "java(debitCard.getCardType().name())")
     @Mapping(target = "number", source = "maskedNumber")
@@ -57,8 +52,7 @@ public interface CardMapper {
     DebitCardResponse toDebitCardResponse(DebitCard debitCard);
 
     /**
-     * Maps CreditCard to CreditCardResponse
-     * number = maskedNumber (always masked for credit cards)
+     * Kredi kartı mapping: Numara her zaman maskeli.
      */
     @Mapping(target = "cardType", expression = "java(creditCard.getCardType().name())")
     @Mapping(target = "number", source = "maskedNumber")
@@ -67,9 +61,8 @@ public interface CardMapper {
     CreditCardResponse toCreditCardResponse(CreditCard creditCard);
 
     /**
-     * Maps VirtualCard to VirtualCardResponse
-     * number = cardNumber (FULL PAN, unmasked for virtual cards)
-     * cvv = cvv (CVV visible for virtual cards)
+     * Sanal kart mapping:
+     * Numara AÇIK (unmasked) verilir, CVV de gösterilir.
      */
     @Mapping(target = "cardType", expression = "java(virtualCard.getCardType().name())")
     @Mapping(target = "number", source = "cardNumber")

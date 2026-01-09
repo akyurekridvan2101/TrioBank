@@ -20,12 +20,12 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Kafka Consumer Configuration
- * 
+ * Kafka Consumer Konfigürasyonu
+ *
  * Kafka event'lerini dinlemek için gerekli beanları tanımlar.
  * Her event tipi için ayrı listener factory oluşturulur (tip güvenliği için).
- * 
- * Pattern: Copied from Account/Ledger services
+ *
+ * Account/Ledger servisleri ile aynı yapıda.
  */
 @Configuration
 @EnableKafka
@@ -59,8 +59,8 @@ public class KafkaConfig {
     }
 
     /**
-     * Global Error Handler
-     * 
+     * Global Hata Yönetimi
+     *
      * Ağ hatası veya DB sorunu olduğunda mesajı 3 kere tekrar dener.
      * 1 saniye bekleyip retry yapar.
      */

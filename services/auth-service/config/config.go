@@ -12,10 +12,10 @@ func GetEnv(name string) string {
 }
 
 func LoadEnv() {
-	// .env dosyası opsiyonel - Kubernetes'te ConfigMap/Secret kullanılıyor
+	// .env dosyası zorunlu değil, k8s ortamında secret/configmap üzerinden alıyoruz.
 	err := godotenv.Load("config/.env")
 	if err != nil {
-		// Sadece development modunda bilgi ver, production'da sessizce devam et
+		// Sadece local/dev ortamındaysak log basalım, prod ortamında zaten env var'lar set edilmiş olmalı.
 		if os.Getenv("APP_ENV") == "dev" || os.Getenv("APP_ENV") == "" {
 			log.Println("Info: .env file not found, using environment variables from system")
 		}

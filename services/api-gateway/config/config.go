@@ -8,9 +8,9 @@ func GetEnv(name string) string {
 	return os.Getenv(name)
 }
 
-// LoadEnv is kept for compatibility but does nothing
-// Environment variables are injected by Kubernetes
+// LoadEnv uyumluluk için duruyor, içi boş
+// Env değişkenleri Kubernetes tarafından inject edilir
 func LoadEnv() {
-	// No-op for Kubernetes deployment
-	// ConfigMap and Secrets are automatically available as env vars
+	// K8s deployment'ında bir şey yapmasına gerek yok
+	// ConfigMap ve Secret'lar zaten env var olarak geliyor
 }

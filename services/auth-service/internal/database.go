@@ -28,7 +28,7 @@ type RedisDB struct {
 
 func (db MongoDB) loginControl(ctx context.Context, data loginData) (User, error) {
 	var user User
-	// Normalize TC for query (trim whitespace)
+	// Sorgu öncesi TC'yi normalize edelim (boşlukları temizle)
 	tc := strings.TrimSpace(data.Tc)
 	collection := db.Db.Collection("Users").FindOne(ctx, bson.M{"tc": tc})
 	err := collection.Decode(&user)
@@ -115,7 +115,7 @@ func (db MongoDB) isRefreshTokenExistAndActive(ctx context.Context, refreshToken
 
 func (db MongoDB) isUserExist(ctx context.Context, tc string) error {
 	collection := db.Db.Collection("Users")
-	// Normalize TC for query (trim whitespace)
+	// TC kimlik numarasını sorgu öncesi temizleyelim
 	tc = strings.TrimSpace(tc)
 	result := collection.FindOne(ctx, bson.M{"tc": tc})
 	if errors.Is(result.Err(), mongo.ErrNoDocuments) {
@@ -158,11 +158,11 @@ func (db MongoDB) updateUserContact(ctx context.Context, userId primitive.Object
 	collection := db.Db.Collection("Users")
 	update := bson.M{}
 	if email != "" {
-		// Normalize email: trim and lowercase
+		// Email standardizasyonu: boşlukları sil ve küçük harfe çevir
 		update["email"] = strings.TrimSpace(strings.ToLower(email))
 	}
 	if phone != "" {
-		// Normalize phone: trim
+		// Telefon numarasını temizle
 		update["tel"] = strings.TrimSpace(phone)
 	}
 	if len(update) == 0 {
@@ -184,29 +184,29 @@ func (db MongoDB) getUserIdByUUID(ctx context.Context, uuid string) (primitive.O
 
 func (db MongoDB) verifyUserEmail(ctx context.Context, tc string, email string) (User, error) {
 	var user User
-	// Normalize input: T.C. Kimlik No'yu trim et
+	// Gelen T.C. verisini temizleyelim
 	tc = strings.TrimSpace(tc)
-	// Email'i normalize et: trim ve lowercase
+	// Email adresini standart formata getir (küçük harf + trim)
 	email = strings.TrimSpace(strings.ToLower(email))
-	
-	// MongoDB'de TC ile kullanıcıyı bul
-	// Önce normalize edilmiş TC ile dene
+
+	// Veritabanında bu TC ile kayıtlı kullanıcı var mı bakalım
+	// İlk olarak temizlenmiş TC ile deneriz
 	collection := db.Db.Collection("Users").FindOne(ctx, bson.M{"tc": tc})
 	err := collection.Decode(&user)
-	
-	// Eğer bulunamazsa, eski kayıtlar için boşluklu TC ile de ara
+
+	// Bulamazsak, eski/bozuk veriler için regex ile tekrar deneriz
 	if err != nil && errors.Is(err, mongo.ErrNoDocuments) {
-		// TC'nin başında/sonunda boşluk olabilir, regex ile ara
-		// TC sadece rakam olduğu için regex güvenli
+		// Başta/sonda boşluk kalmış olabilir, regex ile yakalayalım
+		// TC numerik olduğu için regex performansı sorun olmaz
 		regexTc := "^\\s*" + tc + "\\s*$"
 		collection = db.Db.Collection("Users").FindOne(ctx, bson.M{"tc": bson.M{"$regex": regexTc}})
 		err = collection.Decode(&user)
-	if err != nil {
+		if err != nil {
 			return user, err
 		}
-		// Bulunan kullanıcının TC'sini normalize et (veritabanını düzelt)
+		// Kullanıcıyı bulduk ama verisi bozuksa düzeltelim
 		if strings.TrimSpace(user.Tc) != user.Tc {
-			// Veritabanındaki TC'yi normalize et
+			// DB'deki TC'yi temizleyip güncelliyoruz
 			normalizedTc := strings.TrimSpace(user.Tc)
 			_, updateErr := db.Db.Collection("Users").UpdateOne(ctx, bson.M{"_id": user.Id}, bson.M{"$set": bson.M{"tc": normalizedTc}})
 			if updateErr == nil {
@@ -216,21 +216,21 @@ func (db MongoDB) verifyUserEmail(ctx context.Context, tc string, email string) 
 	} else if err != nil {
 		return user, err
 	}
-	
+
 	// Email eşleşmesini case-insensitive ve trim-aware kontrol et
 	userEmailNormalized := strings.TrimSpace(strings.ToLower(user.Email))
 	if userEmailNormalized != email {
 		return user, errors.New("email does not match")
 	}
-	
-	// Email'i de normalize et (veritabanını düzelt)
+
+	// Email de bozuk kayıtlıysa onu da düzeltelim
 	if userEmailNormalized != user.Email {
 		_, updateErr := db.Db.Collection("Users").UpdateOne(ctx, bson.M{"_id": user.Id}, bson.M{"$set": bson.M{"email": userEmailNormalized}})
 		if updateErr == nil {
 			user.Email = userEmailNormalized
 		}
 	}
-	
+
 	return user, nil
 }
 
@@ -374,9 +374,9 @@ func StartMongoDB() *mongo.Database {
 	if mongoUsername != "" && mongoPassword != "" {
 		mongoHost := "localhost:27017"
 
-		// MONGO_URI can be in two formats:
-		// 1. "mongodb://host:port" (with protocol)
-		// 2. "host:port" (without protocol, K8s style)
+		// MONGO_URI iki formatta gelebilir:
+		// 1. "mongodb://host:port" (protokollü tam adres)
+		// 2. "host:port" (protokol olmadan, K8s stili)
 		if mongoURI != "" {
 			if strings.HasPrefix(mongoURI, "mongodb://") {
 				// Remove "mongodb://" prefix (10 chars)
@@ -406,7 +406,7 @@ func StartMongoDB() *mongo.Database {
 	}
 	db := client.Database(config.GetEnv("MONGO_NAME"))
 	return db
-} // mongo database'i baslatir
+} // MongoDB bağlantısını başlatır ve döner
 func StartRedisDB() *redis.Client {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
 	defer cancel()
@@ -423,4 +423,4 @@ func StartRedisDB() *redis.Client {
 		fmt.Println("redis is running", pong)
 	}
 	return client
-} // redis'i baslatir
+} // Redis bağlantısını kurar
