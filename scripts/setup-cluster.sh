@@ -75,6 +75,15 @@ else
     exit 1
 fi
 
+echo ""
+echo "🌐 ArgoCD UI'ya erişim için port-forward:"
+echo "   kubectl port-forward svc/argocd-server -n argocd 8080:443"
+echo "   Sonra tarayıcıda: https://localhost:8080"
+echo ""
+echo "👉 Şimdi ArgoCD'nin tüm servisleri deploy etmesini bekleyin..."
+echo "   kubectl get applications -n argocd"
+
+
 echo "✅ Bootstrap Complete!"
 echo "👉 Now wait for Vault to appear, then run 'setup-vault.sh'"
 echo "🔑 ArgoCD Password:"
