@@ -1,0 +1,200 @@
+
+commonAnnotations:
+  argocd.argoproj.io/sync-wave: "10"
+
+replicaCount: 1
+
+image:
+  repository: akyurekridvan2101/account-service
+  pullPolicy: Always
+  tag: "latest"
+
+imagePullSecrets:
+  - name: dockerhub-credentials
+
+serviceAccount:
+  create: true
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/path: "/actuator/prometheus"
+  prometheus.io/port: "8081"
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext:
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 8081
+  targetPort: 8081
+
+ingress:
+  enabled: false
+  className: "nginx"
+  annotations: {}
+  hosts:
+    - host: account-service.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 100m
+    memory: 512Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+
+
+livenessProbe:
+  httpGet:
+    path: /actuator/health/liveness
+    port: 8081
+  initialDelaySeconds: 180  # Increased from 120s for consistency
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /actuator/health/readiness
+    port: 8081
+  initialDelaySeconds: 180  # Increased from 120s for consistency
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+
+env:
+  SPRING_PROFILES_ACTIVE: "prod"
+  LOGGING_LEVEL_ROOT: "INFO"
+
+# ConfigMap Environment Variables
+config:
+  APP_ENV: "prod"
+  SERVER_PORT: "8081"
+  # Kafka Configs
+  KAFKA_BOOTSTRAP_SERVERS: "kafka-kafka-bootstrap.triobank.svc.cluster.local:9092"
+  KAFKA_ENABLED: "true"
+  # Database Connection String (Using Service Name from Helm)
+  SPRING_DATASOURCE_URL: "jdbc:sqlserver://account-mssql.triobank.svc.cluster.local:1433;databaseName=account_db;encrypt=false;trustServerCertificate=true"
+  
+  # Topic Configuration - Consumer subscription targets
+  APP_KAFKA_TOPIC_VERSION: "v1"
+  ACCOUNT_KAFKA_CONSUMER_TOPICS_LEDGER-ACCOUNT-CREATION-FAILED: "ledger.AccountCreationFailed.v1"
+  ACCOUNT_KAFKA_CONSUMER_TOPICS_BALANCE-UPDATED: "ledger.BalanceUpdated.v1"
+
+
+# Database Configuration (MSSQL)
+databases:
+  mssql:
+    enabled: true
+    serviceName: account-mssql
+    type: mssql
+    portName: mssql
+    externalName: ""                 # Override in overlays (e.g., host.docker.internal)
+    annotations:
+      description: "Ledger primary transactional database"
+
+database:
+  name: account_db                    # Database name
+  port: 1433                         # MSSQL port
+  serviceName: account-mssql
+
+# Migration Job
+migration:
+  enabled: true
+  image: "akyurekridvan2101/account-migrate:latest"
+  imagePullPolicy: "Always"
+  imagePullSecrets:
+    - name: dockerhub-credentials
+  jdbcParams: "encrypt=false;trustServerCertificate=true"
+  resources:
+    limits:
+      cpu: "200m"
+      memory: "128Mi"
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+
+
+# Kafka & Debezium Configuration
+kafka:
+  bootstrapServers: "kafka-kafka-bootstrap.triobank:9092"
+
+connector:
+  enabled: true
+  name: "account-cdc-connector"
+  secretVolumeName: "account-db-credentials"
+  
+  database:
+    hostname: "account-mssql.triobank"
+    port: 1433
+    names: "account_db"
+    encrypt: "false"
+    trustServerCertificate: "true"
+  
+  table:
+    include: "dbo.outbox_events"
+  
+  topic:
+    prefix: "account"
+  
+  snapshot:
+    mode: "initial"
+  
+  outbox:
+    routeByField: "type"
+    topicReplacement: "account.${routedByValue}.v1"
+    fields:
+      id: "id"
+      key: "aggregate_id"
+      type: "type"
+      payload: "payload"
+      timestamp: "created_at"
+    tombstoneOnEmpty: "false"
+    expandJsonPayload: "true"
+  
+  performance:
+    pollInterval: "500"
+    maxBatchSize: "2048"
+  
+  errors:
+    tolerance: "all"
+    logEnable: "true"
+    logMessages: "true"
+  
+  heartbeat:
+    interval: "60000"
+    topicPrefix: "__debezium-heartbeat"
+  
+  tombstones: "true"
+
+externalSecrets:
+  - name: db-mssql
+    enabled: true
+    vaultPath: secret/dev/services/account
+    targetSecret: account-db-credentials      # K8s Secret name
+    refreshInterval: "1h"
+    fields:
+      - secretKey: username
+        property: db_username
+      - secretKey: password
+        property: db_password
