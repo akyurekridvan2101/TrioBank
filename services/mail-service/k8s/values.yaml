@@ -1,0 +1,78 @@
+
+# Mail Service - Default Configuration
+# Simple Go service for sending emails via Resend API
+
+replicaCount: 1
+
+image:
+  repository: akyurekridvan2101/mail-service
+  pullPolicy: Always
+  tag: "latest"
+
+imagePullSecrets:
+  - name: dockerhub-credentials
+
+serviceAccount:
+  create: true
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext: {}
+
+securityContext:
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 8081
+  targetPort: 8081
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8081
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8081
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 2
+
+# Non-Sensitive Configuration (ConfigMap)
+config:
+  MAIL_SERVICE_PORT: "0.0.0.0:8081"
+  APP_ENV: "development"
+
+# Sensitive Configuration (Vault via ExternalSecret)
+externalSecrets:
+  - name: mail-credentials
+    enabled: true
+    vaultPath: secret/dev/services/mail
+    targetSecret: mail-service-credentials
+    refreshInterval: "1h"
+    fields:
+      - secretKey: RESEND_API_KEY
+        property: resend_api_key
+      - secretKey: SECRET_KEY
+        property: internal_secret_key
