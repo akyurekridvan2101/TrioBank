@@ -1,0 +1,203 @@
+
+commonAnnotations:
+  argocd.argoproj.io/sync-wave: "10"
+
+replicaCount: 1
+
+image:
+  repository: akyurekridvan2101/card-service
+  pullPolicy: Always
+  tag: "latest"
+
+imagePullSecrets:
+  - name: dockerhub-credentials
+
+serviceAccount:
+  create: true
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/path: "/actuator/prometheus"
+  prometheus.io/port: "8083"
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext:
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 8083
+  targetPort: 8083
+
+ingress:
+  enabled: false
+  className: "nginx"
+  annotations: {}
+  hosts:
+    - host: card-service.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 100m
+    memory: 512Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+
+
+livenessProbe:
+  httpGet:
+    path: /actuator/health/liveness
+    port: 8083
+  initialDelaySeconds: 180  # Increased from 120s for consistency
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /actuator/health/readiness
+    port: 8083
+  initialDelaySeconds: 180  # Increased from 120s for consistency
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+
+env:
+  SPRING_PROFILES_ACTIVE: "prod"
+  LOGGING_LEVEL_ROOT: "INFO"
+
+# ConfigMap Environment Variables
+config:
+  APP_ENV: "prod"
+  SERVER_PORT: "8083"
+  # Kafka Configs
+  KAFKA_BOOTSTRAP_SERVERS: "kafka-kafka-bootstrap.triobank.svc.cluster.local:9092"
+  KAFKA_ENABLED: "true"
+  # Database Connection String (Using Service Name from Helm)
+  SPRING_DATASOURCE_URL: "jdbc:sqlserver://card-mssql.triobank.svc.cluster.local:1433;databaseName=card_db;encrypt=false;trustServerCertificate=true"
+  
+  # Account Service Integration
+  ACCOUNT_SERVICE_URL: "http://account-service.triobank.svc.cluster.local:8081"
+  
+  # Topic Configuration - Consumer subscription targets (Future)
+  APP_KAFKA_TOPIC_VERSION: "v1"
+  CARD_KAFKA_CONSUMER_TOPICS_TRANSACTION-COMPLETED: "transaction.TransactionCompleted.v1"
+  CARD_KAFKA_CONSUMER_TOPICS_ACCOUNT-CLOSED: "account.AccountClosed.v1"
+
+
+# Database Configuration (MSSQL)
+databases:
+  mssql:
+    enabled: true
+    serviceName: card-mssql
+    type: mssql
+    portName: mssql
+    externalName: ""                 # Override in overlays (e.g., host.docker.internal)
+    annotations:
+      description: "Ledger primary transactional database"
+
+database:
+  name: card_db                    # Database name
+  port: 1433                         # MSSQL port
+  serviceName: card-mssql
+
+# Migration Job
+migration:
+  enabled: true
+  image: "akyurekridvan2101/card-migrate:latest"
+  imagePullPolicy: "Always"
+  imagePullSecrets:
+    - name: dockerhub-credentials
+  jdbcParams: "encrypt=false;trustServerCertificate=true"
+  resources:
+    limits:
+      cpu: "200m"
+      memory: "128Mi"
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+
+
+# Kafka & Debezium Configuration
+kafka:
+  bootstrapServers: "kafka-kafka-bootstrap.triobank:9092"
+
+connector:
+  enabled: true
+  name: "card-cdc-connector"
+  secretVolumeName: "card-db-credentials"
+  
+  database:
+    hostname: "card-mssql.triobank"
+    port: 1433
+    names: "card_db"
+    encrypt: "false"
+    trustServerCertificate: "true"
+  
+  table:
+    include: "dbo.outbox_events"
+  
+  topic:
+    prefix: "card"
+  
+  snapshot:
+    mode: "initial"
+  
+  outbox:
+    routeByField: "type"
+    topicReplacement: "card.${routedByValue}.v1"
+    fields:
+      id: "id"
+      key: "aggregate_id"
+      type: "type"
+      payload: "payload"
+      timestamp: "created_at"
+    tombstoneOnEmpty: "false"
+    expandJsonPayload: "true"
+  
+  performance:
+    pollInterval: "500"
+    maxBatchSize: "2048"
+  
+  errors:
+    tolerance: "all"
+    logEnable: "true"
+    logMessages: "true"
+  
+  heartbeat:
+    interval: "60000"
+    topicPrefix: "__debezium-heartbeat"
+  
+  tombstones: "true"
+
+externalSecrets:
+  - name: db-mssql
+    enabled: true
+    vaultPath: secret/dev/services/card
+    targetSecret: card-db-credentials      # K8s Secret name
+    refreshInterval: "1h"
+    fields:
+      - secretKey: username
+        property: db_username
+      - secretKey: password
+        property: db_password
