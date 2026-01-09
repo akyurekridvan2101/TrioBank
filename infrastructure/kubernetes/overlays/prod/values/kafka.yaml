@@ -1,0 +1,51 @@
+# Kafka - Production Environment
+# EKS için production resource limitleri ve depolama ayarları
+
+# NodePool depolama - production için artırıldı
+nodePool:
+  storage:
+    size: 10Gi  # Production için 10Gi (dev: 2Gi, base: 5Gi)
+
+# Kafka kaynak limitleri - production workload için optimize edilmiş
+kafka:
+  resources:
+    requests:
+      memory: 2Gi      # Production için artırıldı (dev: 512Mi)
+      cpu: 1000m       # Production için artırıldı (dev: 200m)
+    limits:
+      memory: 4Gi      # Production için artırıldı (dev: 1Gi)
+      cpu: 2000m       # Production için artırıldı (dev: 500m)
+  
+  jvmOptions:
+    -Xms: 1g           # Production için artırıldı (dev: 256m)
+    -Xmx: 2g           # Production için artırıldı (dev: 512m)
+
+# Entity Operator kaynak limitleri
+entityOperator:
+  topicOperator:
+    resources:
+      requests:
+        memory: 256Mi  # Production için artırıldı (dev: 128Mi)
+        cpu: 100m      # Production için artırıldı (dev: 50m)
+      limits:
+        memory: 512Mi  # Production için artırıldı (dev: 256Mi)
+        cpu: 500m      # Production için artırıldı (dev: 200m)
+  
+  userOperator:
+    resources:
+      requests:
+        memory: 256Mi  # Production için artırıldı (dev: 128Mi)
+        cpu: 100m      # Production için artırıldı (dev: 50m)
+      limits:
+        memory: 512Mi  # Production için artırıldı (dev: 256Mi)
+        cpu: 500m      # Production için artırıldı (dev: 200m)
+
+# Kafka Connect resource limits
+connect:
+  resources:
+    requests:
+      cpu: 500m        # Production için artırıldı (dev: 100m)
+      memory: 1Gi      # Production için artırıldı (dev: 256Mi)
+    limits:
+      cpu: 2000m       # Production için artırıldı (dev: 300m)
+      memory: 2Gi      # Production için artırıldı (dev: 512Mi)

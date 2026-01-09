@@ -46,8 +46,17 @@ config:
   topic.creation.default.replication.factor: 1
   topic.creation.compacted.cleanup.policy: compact
 
-# Database credentials - Vault'tan gelen secret'lar
-externalConfiguration:
-  secretsToMount:
-    - name: ledger-db-credentials
-      secretName: ledger-db-credentials
+# Database credentials - Secret mounts (Strimzi requires /mnt prefix)
+secretsToMount:
+  - name: ledger-db-credentials
+    secretName: ledger-db-credentials
+    mountPath: /mnt/secrets/ledger-db-credentials
+  - name: account-db-credentials
+    secretName: account-db-credentials
+    mountPath: /mnt/secrets/account-db-credentials
+  - name: card-db-credentials
+    secretName: card-db-credentials
+    mountPath: /mnt/secrets/card-db-credentials
+  - name: transaction-db-credentials
+    secretName: transaction-db-credentials
+    mountPath: /mnt/secrets/transaction-db-credentials

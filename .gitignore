@@ -196,7 +196,6 @@ vault-keys.txt
 unseal-keys.json
 
 # Postgres/SQL Dumps
-*.sql
 *.dump
 *.db
 *.sqlite

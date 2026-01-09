@@ -1,0 +1,6 @@
+# Vault - Production Environment
+# EKS ortamında EC2'de çalışan Vault instance'ına bağlanır
+
+vault:
+  externalHost: "10.0.0.182"  # EC2 Private IP
+  externalPort: 8200

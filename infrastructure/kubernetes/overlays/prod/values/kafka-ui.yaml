@@ -1,0 +1,11 @@
+# Kafka UI - Production Environment
+# Kafka monitoring için production kaynak limitleri
+
+kafka-ui:
+  resources:
+    requests:
+      cpu: 100m        # Production için artırıldı (dev: 25m)
+      memory: 256Mi    # Production için artırıldı (dev: 64Mi)
+    limits:
+      cpu: 1000m       # Production için artırıldı (dev: 500m)
+      memory: 1Gi      # Production için artırıldı (dev: 512Mi)
