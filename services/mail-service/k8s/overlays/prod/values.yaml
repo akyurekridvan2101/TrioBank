@@ -1,0 +1,51 @@
+# Mail Service - Production Environment
+# Vault kullanır (EC2'de çalışan Vault)
+
+replicaCount: 1  # Production için daha fazla replica
+
+image:
+  tag: "latest"
+  pullPolicy: Always  # Dev ile aynı - image değişikliklerinde güncel versiyonu çek
+
+# Production environment config
+config:
+  APP_ENV: "production"
+  MAIL_SERVICE_PORT: "0.0.0.0:8081"
+
+# Vault Secrets Configuration
+externalSecrets:
+  - name: mail-credentials
+    enabled: true
+    vaultPath: secret/prod/services/mail  # Production path
+    targetSecret: mail-service-credentials
+    refreshInterval: "1h"
+    fields:
+      - secretKey: RESEND_API_KEY
+        property: resend_api_key
+      - secretKey: SECRET_KEY
+        property: internal_secret_key
+
+# Production resources (artırıldı)
+resources:
+  requests:
+    memory: 256Mi    # Production için artırıldı
+    cpu: 100m       # Production için artırıldı
+  limits:
+    memory: 512Mi   # Production için artırıldı
+    cpu: 500m       # Production için artırıldı
+
+# Ingress Configuration for Production
+ingress:
+  enabled: true
+  className: alb  # AWS ALB
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+  hosts:
+    - host: ""  # Vault'tan infrastructure/domain/api alınacak (sonra güncellenecek)
+      paths:
+        - path: /mail(/|$)(.*)
+          pathType: ImplementationSpecific
+
