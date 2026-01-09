@@ -45,6 +45,9 @@ func (repo Repo) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Normalize TC: trim whitespace
+	data.Tc = strings.TrimSpace(data.Tc)
+
 	user, err := repo.DataBase.loginControl(ctx, data)
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -77,6 +80,8 @@ func (repo Repo) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err = repo.SessionManager.saveSessionId(ctx, user.Id, base64.URLEncoding.EncodeToString(sessionId), code.Int64()+1000)
+	// LOGGING FOR MANUAL VERIFICATION
+	fmt.Printf("LOGIN Verification Code: %d\n", code.Int64()+1000)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte("while saving the session id into redis, an error occured"))
@@ -225,6 +230,13 @@ func (repo Repo) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Normalize input data: trim and lowercase email
+	data.Tc = strings.TrimSpace(data.Tc)
+	data.Email = strings.TrimSpace(strings.ToLower(data.Email))
+	data.Name = strings.TrimSpace(data.Name)
+	data.Surname = strings.TrimSpace(data.Surname)
+	data.Tel = strings.TrimSpace(data.Tel)
+
 	user.Id = primitive.NewObjectID()
 	user.UUID = pkg.GenerateUUID()
 	user.Name = data.Name
@@ -287,6 +299,8 @@ func (repo Repo) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = repo.SessionManager.saveSessionId(ctx, user.Id, base64.URLEncoding.EncodeToString(sessionId), code.Int64()+1000)
+	// LOGGING FOR MANUAL VERIFICATION
+	fmt.Printf("REGISTER Verification Code: %d\n", code.Int64()+1000)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte("something went wrong while saving session id"))
@@ -395,14 +409,8 @@ func (repo Repo) RegisterConfirm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// kafka is going to publish an event
-	userJson, err := json.Marshal(user)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte("something went wrong in server side"))
-		return
-	}
-	err = SendKafkaEvent(repo.Producer, ctx, user.UUID, userJson, "UserCreated", "UserCreated")
+	// Send Kafka event - SendKafkaEvent will handle marshaling
+	err = SendKafkaEvent(repo.Producer, ctx, user.UUID, user, "UserCreated", "UserCreated")
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte("UserCreated event could not be sent"))
@@ -716,6 +724,339 @@ func (repo Repo) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &cookie)
 	w.WriteHeader(http.StatusOK)
 	return
+}
+
+func (repo Repo) UpdateUserContact(w http.ResponseWriter, r *http.Request) {
+    defer r.Body.Close()
+
+    if r.Method != http.MethodPost && r.Method != http.MethodPut {
+        w.WriteHeader(http.StatusMethodNotAllowed)
+        return
+    }
+
+    token := r.Header.Get("Authorization")
+    if token == "" {
+        w.WriteHeader(http.StatusBadRequest)
+        return
+    }
+
+    ctx, cancel := context.WithTimeout(r.Context(), time.Second*5)
+    defer cancel()
+
+    if !strings.HasPrefix(token, "Bearer ") {
+        w.WriteHeader(http.StatusUnauthorized)
+        return
+    }
+
+    AccessToken := strings.TrimPrefix(token, "Bearer ")
+
+    userUuid, err := pkg.ValidateAccessToken(AccessToken)
+    if err != nil {
+        w.WriteHeader(http.StatusUnauthorized)
+        return
+    }
+
+    var data updateData
+    if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+        w.WriteHeader(http.StatusBadRequest)
+        return
+    }
+
+    userId, err := repo.DataBase.getUserIdByUUID(ctx, userUuid)
+    if err != nil {
+        w.WriteHeader(http.StatusNotFound)
+        return
+    }
+
+    // Normalize email and phone before update
+    data.Email = strings.TrimSpace(strings.ToLower(data.Email))
+    data.Phone = strings.TrimSpace(data.Phone)
+
+    err = repo.DataBase.updateUserContact(ctx, userId, data.Email, data.Phone)
+    if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        return
+    }
+
+    w.WriteHeader(http.StatusOK)
+    _, _ = w.Write([]byte("user contact updated"))
+}
+
+// ForgotPasswordInitiate initiates password reset process
+func (repo Repo) ForgotPasswordInitiate(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		_, _ = w.Write([]byte("this endpoint can be used only with post request"))
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+	defer cancel()
+
+	var data struct {
+		Tc    string `json:"tc"`
+		Email string `json:"email"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil || data.Tc == "" || data.Email == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte("the request body could not be decoded or the request may not include tc or email fields"))
+		return
+	}
+
+	// Trim TC and Email before verification
+	data.Tc = strings.TrimSpace(data.Tc)
+	data.Email = strings.TrimSpace(data.Email)
+
+	// Verify TC and Email match
+	user, err := repo.DataBase.verifyUserEmail(ctx, data.Tc, data.Email)
+	if err != nil {
+		if err.Error() == "email does not match" {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte("tc and email do not match"))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte("user not found"))
+		return
+	}
+
+	// Rate limiting by TC
+	result, err := repo.SessionManager.setAndControlLimitByTc(ctx, user.Tc)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	if !result {
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte("already there is an active process in redis"))
+		return
+	}
+
+	// Generate verification code
+	code, err := rand.Int(rand.Reader, big.NewInt(9000))
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("while generating the code, an error occured"))
+		return
+	}
+
+	// Generate session ID
+	sessionId := make([]byte, 32)
+	_, err = rand.Read(sessionId)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("while generating the session id, an error occured"))
+		return
+	}
+
+	// Save session to Redis
+	err = repo.SessionManager.saveSessionId(ctx, user.Id, base64.URLEncoding.EncodeToString(sessionId), code.Int64()+1000)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("while saving the session id into redis, an error occured"))
+		return
+	}
+
+	// Send email with code
+	var requestData smsRequestData
+	requestData.Receiver = user.Email
+	requestData.Code = strconv.FormatInt(code.Int64()+1000, 10)
+
+	// LOGGING FOR MANUAL VERIFICATION
+	fmt.Printf("FORGOT PASSWORD Verification Code: %d\n", code.Int64()+1000)
+
+	errChannel := make(chan error)
+	go SendMail(ctx, repo, requestData, errChannel)
+	select {
+	case x := <-errChannel:
+		if x != nil {
+			err = repo.SessionManager.removeLimitByTc(ctx, user.Tc)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				fmt.Print(x.Error())
+				_, _ = w.Write([]byte("something went wrong while deleting limit in redis"))
+				return
+			}
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Print(x.Error())
+			_, _ = w.Write([]byte("something went wrong while sending email"))
+			return
+		}
+	case <-ctx.Done():
+		_ = repo.SessionManager.removeLimitByTc(context.Background(), user.Tc)
+		w.WriteHeader(http.StatusRequestTimeout)
+		_, _ = w.Write([]byte("timeout error occured"))
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"sessionId": base64.URLEncoding.EncodeToString(sessionId),
+	})
+}
+
+// ForgotPasswordVerifyCode verifies the code for password reset
+func (repo Repo) ForgotPasswordVerifyCode(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		_, _ = w.Write([]byte("only post request is allowed"))
+		return
+	}
+
+	var data confirmData
+	err := json.NewDecoder(r.Body).Decode(&data)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte("the request body should include only session id and verification code"))
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), time.Second*5)
+	defer cancel()
+
+	code, err := strconv.ParseInt(data.Code, 10, 64)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte("code type is not correct"))
+		return
+	}
+
+	// Verify code
+	userId, err := repo.SessionManager.controlSessionId(ctx, data.SessionId, code)
+	if err != nil {
+		if errors.Is(err, ErrCodeIsNotCorrect) {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte("the code is not correct or session id invalid"))
+			return
+		} else if errors.Is(err, ErrCodeNotFound) {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte("the code is not found"))
+			return
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("something went wrong in server"))
+		return
+	}
+
+	// Verify user exists
+	_, err = repo.DataBase.getUserById(ctx, userId)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte("user not found"))
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"verified":  true,
+		"sessionId": data.SessionId,
+	})
+}
+
+// ForgotPasswordReset resets the password
+func (repo Repo) ForgotPasswordReset(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		_, _ = w.Write([]byte("only post request is allowed"))
+		return
+	}
+
+	var data struct {
+		SessionId  string `json:"session-id"`
+		Code       string `json:"code"`
+		NewPassword string `json:"new_password"`
+	}
+
+	err := json.NewDecoder(r.Body).Decode(&data)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte("the request body could not be decoded"))
+		return
+	}
+
+	if data.NewPassword == "" || len(data.NewPassword) < 8 {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte("new password is required and must be at least 8 characters"))
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), time.Second*5)
+	defer cancel()
+
+	code, err := strconv.ParseInt(data.Code, 10, 64)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte("code type is not correct"))
+		return
+	}
+
+	// Verify code again (security measure)
+	userId, err := repo.SessionManager.controlSessionId(ctx, data.SessionId, code)
+	if err != nil {
+		if errors.Is(err, ErrCodeIsNotCorrect) {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte("the code is not correct or session id invalid"))
+			return
+		} else if errors.Is(err, ErrCodeNotFound) {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte("the code is not found or expired"))
+			return
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("something went wrong in server"))
+		return
+	}
+
+	// Get user to verify existence
+	user, err := repo.DataBase.getUserById(ctx, userId)
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte("user not found"))
+		return
+	}
+
+	// Hash new password
+	newHashedPassword, err := pkg.HashPassword(data.NewPassword)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("something went wrong while hashing password"))
+		return
+	}
+
+	// Update password
+	err = repo.DataBase.updatePassword(ctx, userId, newHashedPassword)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("something went wrong while updating password"))
+		return
+	}
+
+	// Deactivate all refresh tokens for security (user should login again on all devices)
+	err = repo.DataBase.deactivateAllRefreshTokens(ctx, userId)
+	if err != nil {
+		// Log error but don't fail the request
+		fmt.Printf("Warning: could not deactivate refresh tokens: %v\n", err)
+	}
+
+	// Delete session from Redis
+	err = repo.SessionManager.deleteSessionId(ctx, data.SessionId)
+	if err != nil {
+		// Log error but don't fail the request
+		fmt.Printf("Warning: could not delete session: %v\n", err)
+	}
+
+	// Remove rate limit
+	err = repo.SessionManager.removeLimitByTc(ctx, user.Tc)
+	if err != nil {
+		// Log error but don't fail the request
+		fmt.Printf("Warning: could not remove rate limit: %v\n", err)
+	}
+
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("password reset successfully"))
 }
 
 func Health(w http.ResponseWriter, r *http.Request) {

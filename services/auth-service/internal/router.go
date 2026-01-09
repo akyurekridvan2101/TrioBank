@@ -24,6 +24,12 @@ func StartRouter(r Repo) {
 
 	http.HandleFunc("/auth/password-change", middleware(r.ChangePassword))
 	http.HandleFunc("/auth/delete-account", middleware(r.DeleteAccount))
+	http.HandleFunc("/auth/user/update", middleware(r.UpdateUserContact))
+
+	// Password reset endpoints
+	http.HandleFunc("/auth/forgot-password/initiate", middleware(r.ForgotPasswordInitiate))
+	http.HandleFunc("/auth/forgot-password/verify-code", middleware(r.ForgotPasswordVerifyCode))
+	http.HandleFunc("/auth/forgot-password/reset", middleware(r.ForgotPasswordReset))
 
 	err := http.ListenAndServe(config.GetEnv("AUTH_SERVICE_PORT"), nil)
 	if err != nil {

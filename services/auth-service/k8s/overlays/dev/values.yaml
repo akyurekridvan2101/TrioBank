@@ -1,0 +1,75 @@
+# Auth Service - Development Environment
+
+replicaCount: 1
+
+image:
+  pullPolicy: Always
+
+# Dev-specific config
+config:
+  APP_ENV: "development"
+  AUTH_SERVICE_PORT: ":8080"
+  MONGO_URI: "auth-mongodb.triobank.svc.cluster.local:27017"
+  MONGO_NAME: "AuthServiceDB"
+  REDIS_PORT: "auth-redis.triobank.svc.cluster.local:6379"
+  REDIS_NAME: "AuthServiceRedis"
+  KAFKA_BROKER: "kafka-kafka-bootstrap.triobank.svc.cluster.local:9092"
+  MAIL_SERVICE_PORT: "mail-service.triobank.svc.cluster.local:8081"
+
+# Vault secrets
+externalSecrets:
+  - name: db-credentials
+    enabled: true
+    vaultPath: secret/dev/services/auth
+    targetSecret: auth-db-credentials
+    refreshInterval: "1h"
+    fields:
+      - secretKey: MONGO_USERNAME
+        property: mongo_username
+      - secretKey: MONGO_PASSWORD
+        property: mongo_password
+      - secretKey: REDIS_PASSWORD
+        property: redis_password
+      - secretKey: SECRET_KEY
+        property: secret_key
+      - secretKey: TOKEN_SIGNATURE
+        property: token_signature
+
+# Database Services
+databases:
+  mongodb:
+    enabled: true
+    serviceName: auth-mongodb
+    type: mongodb
+    portName: mongodb
+    externalName: "host.minikube.internal"
+    annotations:
+      description: "Auth MongoDB database"
+  
+  redis:
+    enabled: true
+    serviceName: auth-redis
+    type: redis
+    portName: redis
+    externalName: "host.minikube.internal"
+    annotations:
+      description: "Auth Redis cache"
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+# Ingress Configuration for Dev
+ingress:
+  enabled: true
+  className: nginx
+  annotations: {}
+  hosts:
+    - host: ""
+      paths:
+        - path: /auth
+          pathType: Prefix

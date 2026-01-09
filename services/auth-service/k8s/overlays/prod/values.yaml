@@ -1,0 +1,85 @@
+# Auth Service - Production Environment
+# Vault kullanır (EC2'de çalışan Vault)
+
+replicaCount: 1  # Production için daha fazla replica
+
+image:
+  tag: "latest"
+  pullPolicy: Always  # Dev ile aynı - image değişikliklerinde güncel versiyonu çek
+
+# Production config
+config:
+  APP_ENV: "production"
+  AUTH_SERVICE_PORT: ":8080"
+  MONGO_URI: "auth-mongodb.triobank.svc.cluster.local:27017"
+  MONGO_NAME: "AuthServiceDB"
+  REDIS_PORT: "auth-redis.triobank.svc.cluster.local:6379"
+  REDIS_NAME: "AuthServiceRedis"
+  KAFKA_BROKER: "kafka-kafka-bootstrap.triobank.svc.cluster.local:9092"
+  MAIL_SERVICE_PORT: "mail-service.triobank.svc.cluster.local:8081"
+
+# Vault Secrets Configuration
+externalSecrets:
+  # Database Credentials (Auth Service'e özel)
+  - name: db-credentials
+    enabled: true
+    vaultPath: secret/prod/services/auth  # Production path
+    targetSecret: auth-db-credentials
+    refreshInterval: "1h"
+    fields:
+      - secretKey: MONGO_USERNAME
+        property: mongo_username  # Vault'ta: mongo_username
+      - secretKey: MONGO_PASSWORD
+        property: mongo_password  # Vault'ta: mongo_password
+      - secretKey: REDIS_PASSWORD
+        property: redis_password  # Vault'ta: redis_password
+      - secretKey: SECRET_KEY
+        property: secret_key  # Vault'ta: secret_key
+      - secretKey: TOKEN_SIGNATURE
+        property: token_signature  # Vault'ta: token_signature
+
+# Database Services (Production - EC2 Private IP)
+# IP adresi Vault'ta secret/prod/services/auth -> mongo_address ve redis_address olarak saklanıyor
+# Terraform output: terraform output ec2_private_ip
+databases:
+  mongodb:
+    enabled: true
+    serviceName: auth-mongodb
+    type: mongodb
+    portName: mongodb
+    externalName: "10.0.0.182"  # EC2 Private IP (Vault'ta: mongo_address)
+    annotations:
+      description: "Auth MongoDB database (Production - EC2)"
+
+  redis:
+    enabled: true
+    serviceName: auth-redis
+    type: redis
+    portName: redis
+    externalName: "10.0.0.182"  # EC2 Private IP (Vault'ta: redis_address)
+    annotations:
+      description: "Auth Redis cache (Production - EC2)"
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+# Ingress Configuration for Production
+ingress:
+  enabled: true
+  className: alb  # AWS ALB
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+  hosts:
+    - host: ""  # Vault'tan infrastructure/domain/api alınacak (sonra güncellenecek)
+      paths:
+        - path: /auth(/|$)(.*)
+          pathType: ImplementationSpecific
+
