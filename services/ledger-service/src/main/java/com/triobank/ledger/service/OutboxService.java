@@ -38,10 +38,12 @@ public class OutboxService {
                     "previousBalance", balanceUpdate.getPreviousBalance(),
                     "newBalance", balanceUpdate.getNewBalance(),
                     "delta", balanceUpdate.getDelta(),
-                    "currency", balanceUpdate.getCurrency());
+                    "currency", balanceUpdate.getCurrency(),
+                    "updatedAt", java.time.Instant.now().toString());
 
             insertOutboxEvent("AccountBalance", balanceUpdate.getAccountId(), "BalanceUpdated", payload);
-            log.debug("Published BalanceUpdated event: {}", balanceUpdate.getAccountId());
+            log.debug("Published BalanceUpdated event: accountId={}, newBalance={}",
+                    balanceUpdate.getAccountId(), balanceUpdate.getNewBalance());
         } catch (Exception e) {
             log.error("Failed to publish BalanceUpdated event", e);
             throw new RuntimeException("Failed to publish event", e);

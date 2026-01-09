@@ -55,7 +55,7 @@ public class LedgerService {
          * Bunu yakalayıp graceful şekilde işlemeliyiz.
          */
         @Transactional
-        public void recordTransaction(com.triobank.ledger.dto.event.incoming.TransactionStartedEvent.Payload request) {
+        public void recordTransaction(com.triobank.ledger.dto.event.incoming.TransactionStartedEvent request) {
                 log.info("Recording transaction: {}", request.getTransactionId());
 
                 if (transactionRepository.existsByTransactionId(request.getTransactionId())) {
@@ -72,7 +72,7 @@ public class LedgerService {
         }
 
         private void processTransactionRecord(
-                        com.triobank.ledger.dto.event.incoming.TransactionStartedEvent.Payload request) {
+                        com.triobank.ledger.dto.event.incoming.TransactionStartedEvent request) {
 
                 List<DoubleEntryValidator.ValidationEntry> validationEntries = request.getEntries().stream()
                                 .map(dto -> new DoubleEntryValidator.ValidationEntry(
@@ -110,7 +110,7 @@ public class LedgerService {
          */
         @Transactional
         public void reverseTransaction(
-                        com.triobank.ledger.dto.event.incoming.CompensationRequiredEvent.Payload request) {
+                        com.triobank.ledger.dto.event.incoming.CompensationRequiredEvent request) {
                 String transactionId = request.getTransactionId();
                 String reversalId = request.getCompensationId(); // Using compensationId as reversal Transaction ID
                 log.info("Reversing transaction: {}, reversalId: {}", transactionId, reversalId);
@@ -153,7 +153,7 @@ public class LedgerService {
         }
 
         private LedgerTransaction createTransaction(
-                        com.triobank.ledger.dto.event.incoming.TransactionStartedEvent.Payload request) {
+                        com.triobank.ledger.dto.event.incoming.TransactionStartedEvent request) {
                 return LedgerTransaction.builder()
                                 .transactionId(request.getTransactionId())
                                 .transactionType(request.getTransactionType())
@@ -169,7 +169,7 @@ public class LedgerService {
         }
 
         private List<LedgerEntry> createEntries(LedgerTransaction transaction,
-                        com.triobank.ledger.dto.event.incoming.TransactionStartedEvent.Payload request) {
+                        com.triobank.ledger.dto.event.incoming.TransactionStartedEvent request) {
                 List<LedgerEntry> entries = new ArrayList<>();
 
                 for (com.triobank.ledger.dto.event.incoming.TransactionStartedEvent.EntryDto dto : request

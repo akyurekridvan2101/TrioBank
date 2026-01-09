@@ -122,6 +122,43 @@ public class AccountBalance {
     private Long version = 1L;
 
     /**
+     * Bloke edilmiş tutar - Pending transactionlar için ayrılan miktar
+     * 
+     * Transaction başlatıldığında ama henüz tamamlanmadığında,
+     * bu tutarı "bloke" ederiz. Böylece aynı para iki kere harcanamaz.
+     * 
+     * Örnek Akış:
+     * 1. Transaction başladı: balance=1000, blockedAmount=0
+     * 2. 500 TL bloke edildi: balance=1000, blockedAmount=500, available=500
+     * 3. Transaction tamamlandı: balance=500, blockedAmount=0, available=500
+     * 
+     * NOT: Bloke edilen tutar bakiyeden çıkmaz, sadece kullanılamaz hale gelir.
+     */
+    @Column(name = "blocked_amount", precision = 19, scale = 4, nullable = false)
+    @Builder.Default
+    private BigDecimal blockedAmount = BigDecimal.ZERO;
+
+    /**
+     * Bekleyen borç işlemleri toplamı
+     * 
+     * Henüz kesinleşmemiş DEBIT işlemlerinin toplamı.
+     * Raporlama ve risk yönetimi için kullanılır.
+     */
+    @Column(name = "pending_debits", precision = 19, scale = 4, nullable = false)
+    @Builder.Default
+    private BigDecimal pendingDebits = BigDecimal.ZERO;
+
+    /**
+     * Bekleyen alacak işlemleri toplamı
+     * 
+     * Henüz kesinleşmemiş CREDIT işlemlerinin toplamı.
+     * Raporlama ve risk yönetimi için kullanılır.
+     */
+    @Column(name = "pending_credits", precision = 19, scale = 4, nullable = false)
+    @Builder.Default
+    private BigDecimal pendingCredits = BigDecimal.ZERO;
+
+    /**
      * Oluşturulma zamanı - İlk entry geldiğinde otomatik oluşturulur
      * 
      * Hibernate otomatik olarak şu anki zamanı (UTC) buraya yazar.
@@ -167,5 +204,85 @@ public class AccountBalance {
      */
     public boolean isZeroBalance() {
         return balance.compareTo(BigDecimal.ZERO) == 0;
+    }
+
+    /**
+     * Kullanılabilir bakiye - Kullanıcının harcayabileceği para
+     * 
+     * Balance'dan bloke edilen tutarı çıkararak hesaplanır.
+     * 
+     * @return Kullanılabilir bakiye (balance - blocked_amount)
+     */
+    public BigDecimal getAvailableBalance() {
+        return balance.subtract(blockedAmount);
+    }
+
+    /**
+     * Tutarı bloke et - Transaction başlatılırken çağrılır
+     * 
+     * MUTABLE operation: blockedAmount field'ını günceller.
+     * 
+     * Akış:
+     * 1. Transaction Service: "500 TL transfer başlatıyorum"
+     * 2. Ledger Service: blockAmount(500) çağrılır
+     * 3. blockedAmount += 500 (artırılır)
+     * 4. Kullanılabilir bakiye azalır (balance - blockedAmount)
+     * 
+     * @param amount Bloke edilecek tutar
+     * @throws IllegalArgumentException Amount negatif veya sıfırsa
+     * @throws IllegalStateException    Yetersiz kullanılabilir bakiye varsa
+     */
+    public void blockAmount(BigDecimal amount) {
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Block amount must be positive");
+        }
+        if (getAvailableBalance().compareTo(amount) < 0) {
+            throw new IllegalStateException(
+                    String.format("Insufficient available balance. Available: %s, Requested: %s",
+                            getAvailableBalance(), amount));
+        }
+        this.blockedAmount = this.blockedAmount.add(amount);
+        this.lastUpdatedAt = Instant.now();
+    }
+
+    /**
+     * Bloke edilen tutarı serbest bırak - Transaction tamamlandı/iptal edildi
+     * 
+     * MUTABLE operation: blockedAmount field'ını günceller.
+     * 
+     * Akış:
+     * 1. Transaction tamamlandı veya iptal edildi
+     * 2. Ledger Service: releaseAmount(500) çağrılır
+     * 3. blockedAmount -= 500 (azaltılır)
+     * 4. Kullanılabilir bakiye artar (balance - blockedAmount)
+     * 
+     * @param amount Serbest bırakılacak tutar
+     * @throws IllegalArgumentException Amount negatif veya sıfırsa
+     * @throws IllegalStateException    Bloke tutardan fazla release edilmeye
+     *                                  çalışılırsa
+     */
+    public void releaseAmount(BigDecimal amount) {
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Release amount must be positive");
+        }
+        if (this.blockedAmount.compareTo(amount) < 0) {
+            throw new IllegalStateException(
+                    String.format("Cannot release more than blocked amount. Blocked: %s, Requested: %s",
+                            this.blockedAmount, amount));
+        }
+        this.blockedAmount = this.blockedAmount.subtract(amount);
+        this.lastUpdatedAt = Instant.now();
+    }
+
+    /**
+     * Yeterli kullanılabilir bakiye var mı?
+     * 
+     * Transaction başlatmadan önce kontrol edilir.
+     * 
+     * @param amount Kontrol edilecek tutar
+     * @return true: Yeterli bakiye var, false: Yetersiz
+     */
+    public boolean hasSufficientAvailableBalance(BigDecimal amount) {
+        return getAvailableBalance().compareTo(amount) >= 0;
     }
 }

@@ -11,9 +11,12 @@ import java.time.Instant;
 /**
  * BalanceUpdatedEvent - Bakiye değişim event'i
  * 
- * Topic: triobank.prod.ledger.AccountBalance.v1
+ * Topic: ledger.BalanceUpdated.v1
  * Outbox: aggregate_type=AccountBalance, type=BalanceUpdated
  * Consumers: Account Service, Notification Service, Reporting
+ * 
+ * NOT: OutboxService Map kullanarak serialize eder, DTO sadece type-safe
+ * wrapper
  */
 @Getter
 @Builder

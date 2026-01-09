@@ -1,7 +1,6 @@
 package com.triobank.ledger.event;
 
 import com.triobank.ledger.dto.event.incoming.AccountCreatedEvent;
-
 import com.triobank.ledger.dto.event.incoming.CompensationRequiredEvent;
 import com.triobank.ledger.dto.event.incoming.TransactionStartedEvent;
 import com.triobank.ledger.service.LedgerService;
@@ -42,15 +41,15 @@ public class LedgerEventListener {
                         Acknowledgment acknowledgment) {
 
                 log.info("TransactionStarted eventi geldi: id={}, topic={}, offset={}",
-                                event.getPayload().getTransactionId(), topic, offset);
+                                event.getTransactionId(), topic, offset);
 
                 // Hata olursa exception fırlar, ErrorHandler yakalayıp retry eder.
-                ledgerService.recordTransaction(event.getPayload());
+                ledgerService.recordTransaction(event);
 
                 // Sorun yoksa Kafka'ya "tamamdır" diyoruz
                 acknowledgment.acknowledge();
 
-                log.info("Transaction başarıyla kaydedildi: {}", event.getPayload().getTransactionId());
+                log.info("Transaction başarıyla kaydedildi: {}", event.getTransactionId());
         }
 
         /**
@@ -64,13 +63,13 @@ public class LedgerEventListener {
                         @Payload CompensationRequiredEvent event,
                         Acknowledgment acknowledgment) {
 
-                log.info("Compensation (İade) talebi geldi: transactionId={}", event.getPayload().getTransactionId());
+                log.info("Compensation (İade) talebi geldi: transactionId={}", event.getTransactionId());
 
-                ledgerService.reverseTransaction(event.getPayload());
+                ledgerService.reverseTransaction(event);
 
                 acknowledgment.acknowledge();
 
-                log.info("İade işlemi tamamlandı: {}", event.getPayload().getTransactionId());
+                log.info("İade işlemi tamamlandı: {}", event.getTransactionId());
         }
 
         /**
@@ -86,15 +85,15 @@ public class LedgerEventListener {
                         @Header(KafkaHeaders.OFFSET) Long offset,
                         Acknowledgment acknowledgment) {
 
-                log.info("AccountCreated eventi geldi: accountId={}", event.getPayload().getAccountId());
+                log.info("AccountCreated eventi geldi:accountId={}", event.getAccountId());
 
                 ledgerService.createInitialBalance(
-                                event.getPayload().getAccountId(),
-                                event.getPayload().getCurrency());
+                                event.getAccountId(),
+                                event.getCurrency());
 
                 acknowledgment.acknowledge();
 
-                log.info("Hesap için başlangıç bakiyesi oluşturuldu: {}", event.getPayload().getAccountId());
+                log.info("Hesap için başlangıç bakiyesi oluşturuldu: {}", event.getAccountId());
         }
 
 }

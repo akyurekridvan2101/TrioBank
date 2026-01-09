@@ -67,15 +67,20 @@ livenessProbe:
   httpGet:
     path: /actuator/health/liveness
     port: 8082
-  initialDelaySeconds: 120
-  periodSeconds: 10 
+  initialDelaySeconds: 180  # Increased from 120s to accommodate 90-100s startup
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
 
 readinessProbe:
   httpGet:
     path: /actuator/health/readiness
     port: 8082
-  initialDelaySeconds: 120
+  initialDelaySeconds: 180  # Increased from 120s to accommodate 90-100s startup
   periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
 
 env:
   SPRING_PROFILES_ACTIVE: "prod"
@@ -98,7 +103,7 @@ databases:
     serviceName: ledger-mssql
     type: mssql
     portName: mssql
-    externalName: ""                 # Override in overlays (e.g., host.docker.internal)
+    externalName: "host.docker.internal"  # For local/minikube - override in prod
     annotations:
       description: "Ledger primary transactional database"
 
@@ -150,8 +155,8 @@ connector:
     mode: "initial"
   
   outbox:
-    routeByField: "aggregate_type"
-    topicReplacement: "triobank.local.ledger.${routedByValue}.v1"
+    routeByField: "type"
+    topicReplacement: "ledger.${routedByValue}.v1"
     fields:
       id: "id"
       key: "aggregate_id"
