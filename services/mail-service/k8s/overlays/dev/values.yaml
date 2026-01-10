@@ -1,0 +1,46 @@
+# Mail Service - Development Environment Overrides
+
+# Development specific settings
+replicaCount: 1
+
+image:
+  pullPolicy: Always  # Always pull for dev (latest tag)
+
+# Dev environment config
+config:
+  APP_ENV: "development"
+  MAIL_SERVICE_PORT: "0.0.0.0:8081"
+
+# Vault path for dev secrets
+externalSecrets:
+  - name: mail-credentials
+    enabled: true
+    vaultPath: secret/dev/services/mail
+    targetSecret: mail-service-credentials
+    refreshInterval: "1h"
+    fields:
+      - secretKey: RESEND_API_KEY
+        property: resend_api_key
+      - secretKey: SECRET_KEY
+        property: internal_secret_key
+
+# Lower resources for dev
+resources:
+  limits:
+    cpu: 200m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+# Ingress Configuration for Dev
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+  hosts:
+    - host: ""
+      paths:
+        - path: /mail(/|$)(.*)
+          pathType: ImplementationSpecific

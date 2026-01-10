@@ -1,0 +1,11 @@
+# ====================================================================
+# Migration Image - SQL Server Database Migrations
+# Uses golang-migrate for Transaction Service migrations
+# ====================================================================
+FROM migrate/migrate:latest
+
+# Copy migration files
+COPY migrations /migrations
+
+# Default command (can be overridden in K8s Job)
+ENTRYPOINT ["migrate"]

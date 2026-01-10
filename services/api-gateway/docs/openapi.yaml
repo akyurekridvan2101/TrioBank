@@ -1,0 +1,903 @@
+openapi: 3.0.3
+info:
+  title: TrioBank API Gateway
+  version: 1.0.0
+  description: |
+    TrioBank API Gateway - Tüm microservice'lere tek giriş noktası.
+    
+    **Özellikler:**
+    - Request routing (mikroservislere yönlendirme)
+    - Rate limiting (IP ve kullanıcı bazlı)
+    - Token validation (korumalı endpoint'ler için)
+    
+    **Rate Limit Kuralları:**
+    | Endpoint Tipi | Limit | Key |
+    |---------------|-------|-----|
+    | Public (login, register) | 10 req/min | IP |
+    | Protected | 100 req/min | User ID |
+
+servers:
+  - url: http://localhost:3000
+    description: Local development
+  - url: https://api.triobank.com
+    description: Production
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access token (JWT formatında)
+
+  schemas:
+    # ===== Auth Schemas =====
+    LoginRequest:
+      type: object
+      required: [tc, password]
+      properties:
+        tc:
+          type: string
+          pattern: "^[0-9]{11}$"
+          example: "11111111111"
+          description: 11 haneli TC Kimlik No
+        password:
+          type: string
+          minLength: 8
+          example: "Password123"
+
+    LoginResponse:
+      type: object
+      properties:
+        sessionId:
+          type: string
+          description: Email doğrulama için session ID
+          example: "YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXo"
+
+    ConfirmRequest:
+      type: object
+      required: [session-id, code]
+      properties:
+        session-id:
+          type: string
+          example: "YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXo"
+        code:
+          type: string
+          pattern: "^[0-9]{4}$"
+          example: "1234"
+
+    ConfirmResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: JWT access token
+          example: "eyJhbGciOiJIUzI1NiIs..."
+
+    RegisterRequest:
+      type: object
+      required: [name, surname, email, password, tel, tc]
+      properties:
+        name:
+          type: string
+          example: "Ahmet"
+        surname:
+          type: string
+          example: "Yılmaz"
+        email:
+          type: string
+          format: email
+          example: "ahmet@example.com"
+        password:
+          type: string
+          minLength: 8
+          example: "GucluPassword123"
+        tel:
+          type: string
+          example: "5551234567"
+        tc:
+          type: string
+          pattern: "^[0-9]{11}$"
+          example: "11111111111"
+
+    PasswordChangeRequest:
+      type: object
+      required: [old_password, new_password]
+      properties:
+        old_password:
+          type: string
+          example: "OldPassword123"
+        new_password:
+          type: string
+          minLength: 8
+          example: "NewPassword456"
+
+    DeleteAccountRequest:
+      type: object
+      required: [password]
+      properties:
+        password:
+          type: string
+          example: "MyPassword123"
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "unauthorized"
+        code:
+          type: string
+          example: "AUTH_001"
+
+    # ===== Client Schemas =====
+    Client:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        tc_no:
+          type: string
+          example: "11111111111"
+        first_name:
+          type: string
+          example: "Ahmet"
+        last_name:
+          type: string
+          example: "Yılmaz"
+        email:
+          type: string
+          format: email
+        gsm:
+          type: string
+          example: "+905551234567"
+        birth_date:
+          type: string
+          format: date
+        address:
+          $ref: '#/components/schemas/Address'
+        created_at:
+          type: string
+          format: date-time
+
+    Address:
+      type: object
+      properties:
+        street:
+          type: string
+        city:
+          type: string
+        district:
+          type: string
+        postal_code:
+          type: string
+
+    CreateClientRequest:
+      type: object
+      required: [user_id, tc_no, first_name, last_name, email, gsm, birth_date]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        tc_no:
+          type: string
+          pattern: "^[0-9]{11}$"
+        first_name:
+          type: string
+        last_name:
+          type: string
+        email:
+          type: string
+          format: email
+        gsm:
+          type: string
+        birth_date:
+          type: string
+          format: date
+        address:
+          $ref: '#/components/schemas/Address'
+
+    UpdateClientRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        gsm:
+          type: string
+        address:
+          $ref: '#/components/schemas/Address'
+
+    ClientSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        first_name:
+          type: string
+        last_name:
+          type: string
+        email:
+          type: string
+
+    ClientListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClientSummary'
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    # ===== Ledger Schemas =====
+    AccountStatementResponse:
+      type: object
+      properties:
+        accountId:
+          type: string
+          example: "acc-final-001"
+        currency:
+          type: string
+          example: "TRY"
+        period:
+          type: object
+          properties:
+            startDate:
+              type: string
+              format: date
+            endDate:
+              type: string
+              format: date
+        openingBalance:
+          type: number
+          format: double
+          example: 10000.00
+        closingBalance:
+          type: number
+          format: double
+          example: 10500.00
+        totalDebits:
+          type: number
+          format: double
+          example: 1500.00
+        totalCredits:
+          type: number
+          format: double
+          example: 2000.00
+        netChange:
+          type: number
+          format: double
+          example: 500.00
+        entryCount:
+          type: integer
+          example: 15
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/StatementEntry'
+        pagination:
+          $ref: '#/components/schemas/PaginationMetadata'
+
+    StatementEntry:
+      type: object
+      properties:
+        entryId:
+          type: string
+          format: uuid
+        transactionId:
+          type: string
+        date:
+          type: string
+          format: date
+          description: "Valör tarihi (Muhasebeleşme)"
+        transactionTime:
+          type: string
+          format: date-time
+          description: "Gerçek işlem saati"
+        entryType:
+          type: string
+          enum: [DEBIT, CREDIT]
+          description: "DEBIT=Borç (Çıkış), CREDIT=Alacak (Giriş)"
+        amount:
+          type: number
+          format: double
+          description: "Tutar (her zaman pozitif)"
+        runningBalance:
+          type: number
+          format: double
+          description: "İşlem sonrası kalan bakiye"
+        description:
+          type: string
+          example: "POS ALIŞVERİŞ - MARKET"
+        referenceNumber:
+          type: string
+
+    AccountBalanceResponse:
+      type: object
+      properties:
+        accountId:
+          type: string
+        balance:
+          type: number
+          format: double
+        currency:
+          type: string
+          example: "TRY"
+        lastUpdated:
+          type: string
+          format: date-time
+
+    PaginationMetadata:
+      type: object
+      properties:
+        page:
+          type: integer
+        size:
+          type: integer
+        totalElements:
+          type: integer
+          format: int64
+        totalPages:
+          type: integer
+
+  responses:
+    RateLimitExceeded:
+      description: Rate limit aşıldı
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: Kaç saniye beklemeli
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: "rate limit exceeded"
+              retry_after:
+                type: integer
+                example: 60
+
+    Unauthorized:
+      description: Token geçersiz veya eksik
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "invalid or expired token"
+            code: "AUTH_001"
+
+paths:
+  # ===== PUBLIC ENDPOINTS (No Auth Required) =====
+
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: Kullanıcı Girişi
+      description: |
+        TC ve şifre ile giriş başlatır. Başarılı olursa sessionId döner ve email'e doğrulama kodu gönderilir.
+        
+        **Rate Limit:** 10 req/min (IP bazlı)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Session oluşturuldu, email gönderildi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          description: Eksik veya hatalı veri
+          content:
+            text/plain:
+              example: "tc and password are required"
+        '401':
+          description: TC veya şifre yanlış
+          content:
+            text/plain:
+              example: "invalid credentials"
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+
+  /auth/login/confirm:
+    post:
+      tags: [Authentication]
+      summary: Giriş Onayı
+      description: |
+        Email'e gelen kodu doğrular ve token'ları döndürür.
+        - Access token: JSON body'de
+        - Refresh token: HttpOnly cookie
+        
+        **Rate Limit:** 10 req/min (IP bazlı)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmRequest'
+      responses:
+        '200':
+          description: Giriş başarılı
+          headers:
+            Set-Cookie:
+              description: "Refresh-Token=<token>; HttpOnly; Secure; Path=/; Max-Age=604800"
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfirmResponse'
+        '401':
+          description: Kod yanlış veya session expire
+          content:
+            text/plain:
+              example: "invalid code or session expired"
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+
+  /auth/register:
+    post:
+      tags: [Registration]
+      summary: Kayıt Başlat
+      description: |
+        Yeni kullanıcı kaydı başlatır. Email'e doğrulama kodu gönderir.
+        
+        **Rate Limit:** 5 req/min (IP bazlı)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '200':
+          description: Kayıt başlatıldı
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '409':
+          description: Kullanıcı zaten mevcut
+          content:
+            text/plain:
+              example: "user already exists"
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+
+  /auth/register/confirm:
+    post:
+      tags: [Registration]
+      summary: Kayıt Onayı
+      description: |
+        Email kodunu doğrular ve kullanıcıyı oluşturur.
+        
+        **Rate Limit:** 5 req/min (IP bazlı)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmRequest'
+      responses:
+        '200':
+          description: Kayıt tamamlandı
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfirmResponse'
+        '400':
+          description: Kod hatalı
+        '410':
+          description: Session expire olmuş
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+
+  /auth/logout:
+    post:
+      tags: [Session]
+      summary: Çıkış Yap
+      description: |
+        Cookie'leri temizler ve refresh token'ı deaktif eder.
+        
+        **Not:** Authentication gerektirmez, idempotent.
+      responses:
+        '200':
+          description: Çıkış başarılı
+          headers:
+            Set-Cookie:
+              description: Cookie'ler temizlenir
+              schema:
+                type: string
+          content:
+            text/plain:
+              example: "logged out successfully"
+
+  /auth/refresh:
+    post:
+      tags: [Session]
+      summary: Token Yenile
+      description: |
+        Cookie'deki refresh token ile yeni access token alır.
+        
+        **Not:** Request body gerekmez, token cookie'den okunur.
+      parameters:
+        - name: Refresh-Token
+          in: cookie
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Yeni access token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+        '401':
+          description: Refresh token geçersiz
+          content:
+            text/plain:
+              example: "invalid refresh token"
+
+  # ===== PROTECTED ENDPOINTS (Auth Required) =====
+
+  /auth/password-change:
+    post:
+      tags: [Account]
+      summary: Şifre Değiştir
+      description: |
+        Kullanıcının şifresini değiştirir.
+        
+        **Güvenlik:** Bearer token gerekli
+        **Rate Limit:** 5 req/hour (User ID bazlı)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordChangeRequest'
+      responses:
+        '200':
+          description: Şifre güncellendi
+          content:
+            text/plain:
+              example: "password updated successfully"
+        '400':
+          description: Eski şifre yanlış veya yeni şifre geçersiz
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+
+  /auth/delete-account:
+    delete:
+      tags: [Account]
+      summary: Hesap Sil
+      description: |
+        Kullanıcı hesabını kalıcı olarak siler.
+        
+        ⚠️ **Bu işlem GERİ ALINAMAZ!**
+        
+        **Güvenlik:** Bearer token + Refresh-Token cookie + şifre onayı gerekli
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: Refresh-Token
+          in: cookie
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteAccountRequest'
+      responses:
+        '200':
+          description: Hesap silindi
+          headers:
+            Set-Cookie:
+              description: Cookie temizlenir
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ===== GATEWAY ENDPOINTS =====
+
+  /health:
+    get:
+      tags: [Gateway]
+      summary: Health Check
+      description: Gateway ve bağlı servislerin durumunu kontrol eder
+      responses:
+        '200':
+          description: Gateway sağlıklı
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "healthy"
+
+  # ===== CLIENT SERVICE ENDPOINTS (Protected) =====
+
+  /clients:
+    get:
+      tags: [Clients]
+      summary: Client Listesi
+      description: |
+        Tüm client'ları listeler (sayfalı).
+        
+        **Güvenlik:** Bearer token gerekli
+        **Rate Limit:** 100 req/min (User ID bazlı)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+      responses:
+        '200':
+          description: Client listesi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+
+    post:
+      tags: [Clients]
+      summary: Yeni Client Oluştur
+      description: |
+        Yeni bir client kaydı oluşturur.
+        
+        **Not:** Normalde Kafka event ile otomatik oluşturulur.
+        **Güvenlik:** Bearer token gerekli
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateClientRequest'
+      responses:
+        '201':
+          description: Client oluşturuldu
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Client'
+        '400':
+          description: Geçersiz istek
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /clients/{id}:
+    get:
+      tags: [Clients]
+      summary: Client Detayı
+      description: |
+        Belirtilen ID'ye sahip client'ı getirir.
+        
+        **Güvenlik:** Bearer token gerekli
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Client detayı
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Client'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Client bulunamadı
+
+    put:
+      tags: [Clients]
+      summary: Client Güncelle
+      description: |
+        Client bilgilerini günceller.
+        
+        **Güvenlik:** Bearer token gerekli
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateClientRequest'
+      responses:
+        '200':
+          description: Client güncellendi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Client'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Client bulunamadı
+
+    delete:
+      tags: [Clients]
+      summary: Client Sil
+      description: |
+        Client kaydını siler.
+        
+        **Güvenlik:** Bearer token gerekli
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Client silindi
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Client bulunamadı
+
+  # ===== LEDGER SERVICE ENDPOINTS (Protected) =====
+
+  /api/accounts/{accountId}/statement:
+    get:
+      tags: [Ledger]
+      summary: Hesap Hareketleri
+      description: |
+        Hesap ekstresi ve işlem geçmişini döner.
+        
+        **Güvenlik:** Bearer token gerekli
+        **Rate Limit:** 100 req/min (User ID bazlı)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "acc-final-001"
+        - name: startDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [DEBIT, CREDIT]
+        - name: keyword
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 0
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Hesap hareketleri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountStatementResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/balances/{accountId}:
+    get:
+      tags: [Ledger]
+      summary: Bakiye Sorgulama
+      description: Hesap bakiyesini anlık olarak sorgular.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Güncel bakiye
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountBalanceResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+tags:
+  - name: Authentication
+    description: Giriş işlemleri
+  - name: Registration
+    description: Kayıt işlemleri
+  - name: Session
+    description: Oturum yönetimi
+  - name: Account
+    description: Hesap ayarları (Protected)
+  - name: Clients
+    description: Müşteri yönetimi (Protected)
+  - name: Ledger
+    description: Hesap hareketleri ve bakiye (Protected)
+  - name: Gateway
+    description: Gateway sistem endpoint'leri

@@ -1,0 +1,9 @@
+FROM migrate/migrate:v4.18.1
+
+# Copy migration SQL files into the image
+COPY migrations /migrations
+
+WORKDIR /
+
+# migrate binary is the entrypoint from base image
+# Usage: docker run <image> -source file:///migrations -database "..." up

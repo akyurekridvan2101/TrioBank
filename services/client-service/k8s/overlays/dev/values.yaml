@@ -1,0 +1,64 @@
+# Client Service - Development Environment
+
+replicaCount: 1
+
+image:
+  pullPolicy: Always
+
+# Dev-specific config
+config:
+  APP_ENV: "development"
+  CLIENT_SERVICE_PORT: ":8082"
+  SQL_ADDRESS: "client-mssql.triobank.svc.cluster.local:1433"
+  SQL_DATABASE_NAME: "client_db"
+  KAFKA_BROKER: "kafka-kafka-bootstrap.triobank.svc.cluster.local:9092"
+  KAFKA_TOPIC: "UserCreated"
+  KAFKA_GROUP_ID: "client-service-consumer-dev"
+  ACCOUNT_SERVICE_BASE_URL: "http://account-service.triobank.svc.cluster.local:8081"
+
+# Vault secrets
+externalSecrets:
+  - name: db-mssql
+    enabled: true
+    vaultPath: secret/dev/services/client
+    targetSecret: client-db-credentials
+    refreshInterval: "1h"
+    fields:
+      - secretKey: SQL_USERNAME
+        property: db_username
+      - secretKey: SQL_PASSWORD
+        property: db_password
+
+# Database
+database:
+  name: client_db
+  port: 1433
+  serviceName: client-mssql
+
+databases:
+  mssql:
+    enabled: true
+    serviceName: client-mssql
+    type: mssql
+    portName: mssql
+    externalName: "host.minikube.internal"  #Local MSSQL for dev
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+# Ingress Configuration for Dev
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+  hosts:
+    - host: ""
+      paths:
+        - path: /clients(/|$)(.*)
+          pathType: ImplementationSpecific

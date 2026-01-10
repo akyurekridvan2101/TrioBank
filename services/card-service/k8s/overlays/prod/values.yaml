@@ -1,0 +1,69 @@
+# Card Service - Production Environment
+# Vault kullanır (EC2'de çalışan Vault)
+
+replicaCount: 1  # Production için daha fazla replica
+
+image:
+  tag: "latest"
+  pullPolicy: Always  # Dev ile aynı - image değişikliklerinde güncel versiyonu çek
+
+app:
+  environment: production
+  logLevel: info  # Production'da debug yerine info
+  logFormat: json  # Production'da structured logging
+
+resources:
+  requests:
+    memory: 1Gi    # Production için artırıldı
+    cpu: 500m      # Production için artırıldı
+  limits:
+    memory: 2Gi    # Production için artırıldı
+    cpu: 1000m     # Production için artırıldı
+
+# Database Configuration - EC2 Private IP
+# IP adresi Vault'ta secret/prod/services/card -> db_address olarak saklanıyor
+# Terraform output: terraform output ec2_private_ip
+databases:
+  mssql:
+    enabled: true
+    serviceName: card-mssql
+    type: mssql
+    portName: mssql
+    externalName: "10.0.0.182"  # EC2 Private IP (Vault'ta: db_address)
+    annotations:
+      description: "Card Service MSSQL database (Production - EC2)"
+
+database:
+  name: card_db
+  port: 1433
+  serviceName: card-mssql
+
+# Vault Secrets Configuration
+externalSecrets:
+  # Database Credentials (Card Service'e özel)
+  - name: db-credentials
+    enabled: true
+    vaultPath: secret/prod/services/card  # Production path
+    targetSecret: card-db-credentials
+    refreshInterval: "1h"
+    fields:
+      - secretKey: username
+        property: db_username  # Vault'ta: db_username
+      - secretKey: password
+        property: db_password   # Vault'ta: db_password
+
+# Ingress Configuration for Production
+ingress:
+  enabled: true
+  className: alb  # AWS ALB
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+  hosts:
+    - host: ""  # Vault'tan infrastructure/domain/api alınacak (sonra güncellenecek)
+      paths:
+        - path: /cards(/|$)(.*)
+          pathType: ImplementationSpecific
+

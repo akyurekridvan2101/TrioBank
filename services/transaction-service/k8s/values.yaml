@@ -1,0 +1,198 @@
+
+commonAnnotations:
+  argocd.argoproj.io/sync-wave: "10"
+
+replicaCount: 1
+
+image:
+  repository: akyurekridvan2101/transaction-service
+  pullPolicy: Always
+  tag: "latest"
+
+imagePullSecrets:
+  - name: dockerhub-credentials
+
+serviceAccount:
+  create: true
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/path: "/actuator/prometheus"
+  prometheus.io/port: "8082"
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext:
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 8084
+  targetPort: 8084
+
+ingress:
+  enabled: false
+  className: "nginx"
+  annotations: {}
+  hosts:
+    - host: transaction-service.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 100m
+    memory: 512Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+
+
+livenessProbe:
+  httpGet:
+    path: /actuator/health/liveness
+    port: 8084
+  initialDelaySeconds: 180  # Increased from 120s to accommodate 90-100s startup
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /actuator/health/readiness
+    port: 8084
+  initialDelaySeconds: 180  # Increased from 120s to accommodate 90-100s startup
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+
+env:
+  SPRING_PROFILES_ACTIVE: "prod"
+  LOGGING_LEVEL_ROOT: "INFO"
+
+# ConfigMap Environment Variables
+config:
+  APP_ENV: "prod"
+  SERVER_PORT: "8084"
+  # Kafka Configs
+  KAFKA_BOOTSTRAP_SERVERS: "kafka-kafka-bootstrap.triobank.svc.cluster.local:9092"
+  KAFKA_ENABLED: "true"
+  # Database Connection String (Using Service Name from Helm)
+  SPRING_DATASOURCE_URL: "jdbc:sqlserver://transaction-mssql.triobank.svc.cluster.local:1433;databaseName=transaction_db;encrypt=false;trustServerCertificate=true"
+  # External Service URLs (Kubernetes Service Discovery)
+  ACCOUNT_SERVICE_URL: "http://account-service.triobank.svc.cluster.local:8081"
+  CARD_SERVICE_URL: "http://card-service.triobank.svc.cluster.local:8083"
+  LEDGER_SERVICE_URL: "http://ledger-service.triobank.svc.cluster.local:8082"
+
+# Database Configuration (MSSQL)
+databases:
+  mssql:
+    enabled: true
+    serviceName: transaction-mssql
+    type: mssql
+    portName: mssql
+    externalName: "host.docker.internal"  # For local/minikube - override in prod
+    annotations:
+      description: "Transaction primary transactional database"
+
+database:
+  name: transaction_db                    # Database name
+  port: 1433                         # MSSQL port
+  serviceName: transaction-mssql
+
+# Migration Job
+migration:
+  enabled: true
+  image: "akyurekridvan2101/transaction-migrate:latest"
+  imagePullPolicy: "Always"
+  imagePullSecrets:
+    - name: dockerhub-credentials
+  jdbcParams: "encrypt=false;trustServerCertificate=true"
+  resources:
+    limits:
+      cpu: "200m"
+      memory: "128Mi"
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+
+
+# Kafka & Debezium Configuration
+kafka:
+  bootstrapServers: "kafka-kafka-bootstrap.triobank:9092"
+
+connector:
+  enabled: true
+  name: "transaction-cdc-connector"
+  secretVolumeName: "transaction-db-credentials"
+  
+  database:
+    hostname: "transaction-mssql.triobank"
+    port: 1433
+    names: "transaction_db"
+    encrypt: "false"
+    trustServerCertificate: "true"
+  
+  table:
+    include: "dbo.outbox_events"
+  
+  topic:
+    prefix: "transaction"
+  
+  snapshot:
+    mode: "initial"
+  
+  outbox:
+    routeByField: "type"
+    topicReplacement: "transaction.${routedByValue}.v1"
+    fields:
+      id: "id"
+      key: "aggregate_id"
+      type: "type"
+      payload: "payload"
+      timestamp: "created_at"
+    tombstoneOnEmpty: "false"
+    expandJsonPayload: "true"
+  
+  performance:
+    pollInterval: "500"
+    maxBatchSize: "2048"
+  
+  errors:
+    tolerance: "all"
+    logEnable: "true"
+    logMessages: "true"
+  
+  heartbeat:
+    interval: "60000"
+    topicPrefix: "__debezium-heartbeat"
+  
+  tombstones: "true"
+
+externalSecrets:
+  - name: db-mssql
+    enabled: true
+    vaultPath: secret/dev/services/transaction
+    targetSecret: transaction-db-credentials      # K8s Secret name
+    refreshInterval: "1h"
+    fields:
+      - secretKey: username
+        property: db_username
+      - secretKey: password
+        property: db_password
