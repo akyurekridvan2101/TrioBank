@@ -1,0 +1,7 @@
+
+apiVersion: v2
+name: connect
+description: Debezium SQL Server Plugin içeren özel Kafka Connect Cluster
+type: application
+version: 0.1.0
+appVersion: "4.0.1"

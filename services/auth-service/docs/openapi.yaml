@@ -1,0 +1,722 @@
+openapi: 3.0.3
+info:
+  title: Auth Service API
+  version: 1.0.0
+  description: |
+    Bu servis, kullanıcı giriş, kayıt, token üretimi, token yenileme ve API Gateway middleware’i için token doğrulama işlemlerini yürütür.
+    Access token'lar DB’de tutulmaz; yalnızca Refresh token saklanır.
+    API Gateway her istekte access token doğrulamak için /auth/validation endpoint’ini kullanır.
+
+servers:
+  - url: http://localhost:3000/api/v1
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+
+    EmptyObject:
+      type: object
+      example: {}
+
+    LoginRequest:
+      type: object
+      required: [tc, password]
+      properties:
+        tc:
+          type: string
+          example: "11111111111"
+        password:
+          type: string
+          example: "Password123"
+
+    LoginResponse:
+      type: object
+      properties:
+        sessionId:
+          type: string
+          description: Base64 URL encoded 32-byte session ID
+          example: "YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXo"
+
+    ConfirmRequest:
+      type: object
+      required: [session-id, code]
+      properties:
+        session-id:
+          type: string
+          description: Base64 URL encoded session ID (login endpoint'inden dönen)
+          example: "YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXo"
+        code:
+          type: string
+          description: 4 haneli doğrulama kodu (1000-9999 arası)
+          pattern: "^[0-9]{4}$"
+          example: "1234"
+
+    RegisterRequest:
+      type: object
+      required: [name, surname, email, password, tel, tc]
+      properties:
+        name: { type: string, example: "Ahmet" }
+        surname: { type: string, example: "Yılmaz" }
+        email: { type: string, example: "ahmet@example.com" }
+        password: { type: string, example: "Guclupassword123" }
+        tel: { type: string, example: "5551234567" }
+        tc: { type: string, example: "11111111111" }
+
+    TokenResponse:
+      type: object
+      properties:
+        refreshToken: { type: string }
+        accessToken: { type: string }
+
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+
+    RefreshResponse:
+      type: object
+      properties:
+        accessToken: { type: string }
+
+    ValidationRequest:
+      type: object
+      required: [accessToken]
+      properties:
+        accessToken:
+          type: string
+
+    PasswordChangeRequest:
+      type: object
+      required: [old_password, new_password]
+      properties:
+        old_password:
+          type: string
+          description: Mevcut şifre
+          example: "OldPassword123!"
+        new_password:
+          type: string
+          description: |-
+            Yeni şifre (min 8 karakter, en az 1 büyük harf, 1 küçük harf, 1 rakam içermeli)
+          minLength: 8
+          pattern: "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).{8,}$"
+          example: "NewPassword123!"
+
+paths:
+
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: Kullanıcı Girişi
+      description: |
+        Kullanıcı giriş bilgileri Auth DB'de doğrulanır.
+        Bilgiler doğruysa sessionId ve doğrulama kodu üretilir.
+        sessionId Base64 URL encoded bir random 32-byte değerdir.
+        
+        **Rate Limiting:** Kullanıcı başına aynı anda yalnızca bir aktif login işlemi yapılabilir.
+        Önceki işlem hala aktifse (3 dakika içinde) 429 döner.
+        
+        **Akış:**
+        1. TC ve şifre MongoDB'de doğrulanır
+        2. Redis'te rate limit kontrolü yapılır (SetNX ile atomic)
+        3. 4 haneli doğrulama kodu üretilir (1000-9999)
+        4. Session ID ve kod Redis'e kaydedilir (3 dk TTL)
+        5. Doğrulama kodu kullanıcının email adresine gönderilir
+        6. Session ID client'a döner
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Giriş başarılı, sessionId üretildi ve doğrulama kodu email'e gönderildi.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginResponse' }
+        '400':
+          description: Eksik veya hatalı veri.
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "the request body could not be decoded or the request may do not include password or tc fields"
+        '401':
+          description: TC veya şifre yanlış.
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "the login inputs are invalid"
+        '405':
+          description: Yalnızca POST metodu kabul edilir.
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "this endpoint can be used only with post request"
+        '429':
+          description: Bu kullanıcı için zaten aktif bir login işlemi var (3 dakika bekleyin).
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "already there is an active process in redis"
+        '500':
+          description: Sunucu hatası.
+          content:
+            text/plain:
+              schema:
+                type: string
+              examples:
+                codeGeneration:
+                  summary: Kod üretim hatası
+                  value: "while generating the code, an error occured"
+                sessionIdGeneration:
+                  summary: Session ID üretim hatası
+                  value: "while generating the session id, an error occured"
+                redisSave:
+                  summary: Redis kayıt hatası
+                  value: "while saving the session id into redis, an error occured"
+                mailError:
+                  summary: Email gönderim hatası
+                  value: "something went wrong while sending sms"
+                limitDelete:
+                  summary: Rate limit silme hatası
+                  value: "something went wrong while deleting limit in redis"
+                timeout:
+                  summary: Timeout hatası
+                  value: "timeout error occured"
+
+  /auth/login/confirm:
+    post:
+      tags: [Authentication]
+      summary: Giriş Onayı (Email Kodu Doğrulama)
+      description: |
+        Kullanıcı email'e gelen doğrulama kodunu onaylar.
+        Başarılı doğrulama sonrası:
+        - Access token JSON body ile döner
+        - Refresh token HttpOnly cookie olarak set edilir (7 gün geçerli)
+        
+        **Not:** Session ID 3 dakika içinde expire olur, kullanıcı bu sürede onaylamalıdır.
+        
+        **Akış:**
+        1. Session ID ve kod Redis'te doğrulanır
+        2. Mevcut refresh tokenlar pasif yapılır
+        3. Yeni refresh ve access token üretilir
+        4. Refresh token MongoDB'ye kaydedilir
+        5. Session ID Redis'ten silinir
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ConfirmRequest' }
+      responses:
+        '200':
+          description: Tokenlar üretildi.
+          headers:
+            Set-Cookie:
+              description: |
+                HttpOnly refresh token cookie (7 gün geçerli).
+                Örnek: Refresh-Token=<token>; HttpOnly; Secure; Path=/; Max-Age=604800
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                    description: JWT access token
+                    example: "eyJhbGciOiJIUzI1NiIs..."
+        '400':
+          description: Request body hatalı veya kod formatı yanlış.
+          content:
+            text/plain:
+              schema:
+                type: string
+              examples:
+                bodyError:
+                  summary: Request body hatası
+                  value: "the request body should include only session id and verification code"
+                codeTypeError:
+                  summary: Kod tipi hatası
+                  value: "code type is not correct"
+        '401':
+          description: Kod yanlış veya session ID geçersiz/expire olmuş.
+          content:
+            text/plain:
+              schema:
+                type: string
+              examples:
+                incorrectCode:
+                  summary: Kod yanlış
+                  value: "the code is not correct or session id invalid"
+                notFound:
+                  summary: Session bulunamadı (expire olmuş)
+                  value: "the code is not found"
+        '405':
+          description: Yalnızca POST metodu kabul edilir.
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "only post request is allowed"
+        '500':
+          description: Sunucu hatası.
+          content:
+            text/plain:
+              schema:
+                type: string
+              examples:
+                tokenError:
+                  summary: Token üretim hatası
+                  value: "something went wrong in creating refresh and access token"
+                sessionDeleteError:
+                  summary: Session silme hatası
+                  value: "deleting session data in redis rised an error"
+                sendError:
+                  summary: Response gönderim hatası
+                  value: "something went wrong in sending access token"
+
+
+  /auth/register:
+    post:
+      tags: [Registration]
+      summary: Kullanıcı Kaydı Başlatma
+      description: |
+        Kullanıcı bilgileri kontrol edilir; yeni kullanıcı geçici olarak Redis'e kaydedilir ve SMS code gönderilir.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterRequest' }
+      responses:
+        '200':
+          description: Kayıt başlatıldı, sessionId gönderildi.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginResponse' }
+        '409': { description: Kullanıcı zaten mevcut. }
+        '500': { description: Sunucu hatası. }
+
+  /auth/register/confirm:
+    post:
+      tags: [Registration]
+      summary: Kayıt Onayı (SMS code Doğrulama)
+      description: |
+        SMS code doğrulanır, kullanıcı DB'ye kaydedilir ve tokenlar üretilir.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ConfirmRequest' }
+      responses:
+        '200':
+          description: Kayıt tamamlandı, tokenlar üretildi.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+        '400': { description: code hatalı. }
+        '410': { description: code süresi dolmuş. }
+        '500': { description: Sunucu hatası. }
+
+  /auth/logout:
+    post:
+      tags: [Token Operations]
+      summary: Çıkış Yap
+      description: |
+        Kullanıcı çıkış yapar ve token'ları temizlenir.
+        
+        **Akış:**
+        1. Refresh-Token ve Access-Token cookie'leri MaxAge=-1 ile sıfırlanır (tarayıcıdan silinir)
+        2. Eğer Refresh-Token cookie'si mevcutsa, token MongoDB'den de silinir
+        3. Cookie mevcut olmasa bile işlem başarılı döner (idempotent)
+        
+        **Not:** Bu endpoint authentication gerektirmez. Herhangi bir kullanıcı çağırabilir.
+        Zaten giriş yapmamış bir kullanıcı çağırırsa sadece cookie'ler temizlenir, hata dönmez.
+      responses:
+        '200':
+          description: Çıkış başarılı, cookie'ler temizlendi.
+          headers:
+            Set-Cookie:
+              description: |
+                İki cookie silinir (MaxAge=-1 ile expire edilir):
+                - Refresh-Token=; HttpOnly; Secure; Path=/; Max-Age=-1
+                - Access-Token=; HttpOnly; Secure; Path=/; Max-Age=-1
+              schema:
+                type: string
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "logged out successfully"
+        '405':
+          description: Yalnızca POST metodu kabul edilir.
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /auth/refresh:
+    post:
+      tags: [Token Operations]
+      summary: Access Token Yenileme
+      description: |
+        HttpOnly cookie'deki refresh token doğrulanır ve yeni access token üretilir.
+        
+        **Akış:**
+        1. Request'teki `Refresh-Token` HttpOnly cookie'si okunur
+        2. Token MongoDB'de aranır ve doğrulanır:
+           - Token mevcut mu?
+           - Token aktif mi (isActive: true)?
+           - Token expire olmamış mı (expiredAt > now)?
+        3. Doğrulama başarılıysa yeni access token üretilir
+        4. (Opsiyonel) Token rotation: Yeni refresh token da üretilebilir
+        
+        **Güvenlik:**
+        - Refresh token HttpOnly cookie olarak gelir (XSS koruması)
+        - Request body gerekmez
+        - CSRF koruması için SameSite=Strict önerilir
+        
+        **Not:** Cookie yoksa veya expire olmuşsa 401 döner.
+      parameters:
+        - name: Refresh-Token
+          in: cookie
+          required: true
+          description: HttpOnly refresh token cookie (login veya register sonrası set edilir)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Yeni access token üretildi.
+          headers:
+            Set-Cookie:
+              description: |
+                Token rotation aktifse yeni refresh token cookie'si set edilir.
+                Örnek: Refresh-Token=<new-token>; HttpOnly; Secure; Path=/; Max-Age=604800
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                    description: Yeni JWT access token
+                    example: "eyJhbGciOiJIUzI1NiIs..."
+        '401':
+          description: Refresh token geçersiz veya bulunamadı.
+          content:
+            text/plain:
+              schema:
+                type: string
+              examples:
+                noCookie:
+                  summary: Cookie bulunamadı
+                  value: "the refresh code could not be found"
+                invalidToken:
+                  summary: Token geçersiz veya expire olmuş
+                  value: "the refresh code is not valid"
+        '405':
+          description: Yalnızca POST metodu kabul edilir.
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Sunucu hatası.
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "something went wrong while converting access token into json"
+
+  /auth/validation:
+    post:
+      tags: [Token Operations]
+      summary: Access Token Doğrulama (API Gateway için)
+      description: |
+        API Gateway her korumalı endpoint'e gelen istekte bu endpoint'i çağırır.
+        Token geçerliyse 200, geçersizse 401 döner.
+        
+        **Kullanım Senaryosu:**
+        1. Client → API Gateway'e istek yapar (Authorization: Bearer <token>)
+        2. API Gateway → /auth/validation çağırır
+        3. Token geçerliyse → 200 döner, Gateway isteği backend'e yönlendirir
+        4. Token geçersizse → 401 döner, Gateway client'a 401 döner
+        
+        **Doğrulama Adımları:**
+        1. JWT imza doğrulaması (secret key ile)
+        2. Token expire kontrolü (exp claim)
+        3. Issuer kontrolü (iss = "auth-service")
+        
+        **Not:** Bu endpoint sadece internal kullanım içindir.
+      parameters:
+        - name: Authorization
+          in: header
+          required: true
+          description: Bearer token formatında access token
+          schema:
+            type: string
+            example: "Bearer eyJhbGciOiJIUzI1NiIs..."
+      responses:
+        '200':
+          description: Token geçerli, kullanıcı ID'si döner.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user_id:
+                    type: string
+                    description: Kullanıcı ID (MongoDB ObjectID veya UUID formatında)
+                    example: "507f1f77bcf86cd799439011"
+        '400':
+          description: Authorization header eksik veya formatı yanlış.
+          content:
+            text/plain:
+              schema:
+                type: string
+              examples:
+                missingHeader:
+                  summary: Header eksik
+                  value: "authorization header is required"
+                invalidFormat:
+                  summary: Format hatalı
+                  value: "invalid authorization header format"
+        '401':
+          description: Token geçersiz, expire olmuş veya imza doğrulanamadı.
+          content:
+            text/plain:
+              schema:
+                type: string
+              examples:
+                invalidToken:
+                  summary: Token geçersiz
+                  value: "invalid access token"
+                expiredToken:
+                  summary: Token süresi dolmuş
+                  value: "token has expired"
+                invalidSignature:
+                  summary: İmza doğrulanamadı
+                  value: "invalid token signature"
+        '405':
+          description: Yalnızca POST metodu kabul edilir.
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Sunucu hatası.
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "internal server error"
+
+  /auth/password-change:
+    post:
+      tags: [Account Settings]
+      summary: Şifre Değiştirme
+      description: |-
+        Kullanıcının şifresi güncellenir.
+        
+        **Akış:**
+        1. Authorization header'dan Bearer token okunur ve format kontrol edilir
+        2. Token doğrulanır ve user UUID çıkarılır
+        3. Request body'den old_password ve new_password alınır
+        4. Boş string kontrolü yapılır
+        5. Yeni ve eski şifrenin aynı olmadığı kontrol edilir
+        6. UUID ile kullanıcı bulunur ve eski şifre doğrulanır
+        7. Yeni şifre hash'lenir (bcrypt)
+        8. MongoDB'de şifre güncellenir
+        
+        **Güvenlik:**
+        - Bearer token format kontrolü (401 döner)
+        - Eski şifre doğrulaması zorunlu (unauthorized değişikliği önler)
+        - Yeni şifre eski şifreden farklı olmalı
+        - Bcrypt ile şifre karşılaştırma (timing attack koruması)
+        
+        **Not:** Yeni şifre için otomatik güçlülük kontrolü yapılmaz. Uygulama katmanında kontrol önerilir.
+        
+      parameters:
+        - name: Authorization
+          in: header
+          required: true
+          description: Bearer token formatında access token (format kontrolü yapılır)
+          schema:
+            type: string
+            example: "Bearer eyJhbGciOiJIUzI1NiIs..."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordChangeRequest'
+      responses:
+        '200':
+          description: Şifre başarıyla güncellendi.
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "password updated successfully"
+        '400':
+          description: Request body hatalı, şifreler boş veya aynı, ya da Authorization header eksik.
+          content:
+            text/plain:
+              schema:
+                type: string
+              examples:
+                bodyError:
+                  summary: Request body decode hatası
+                  value: "old password and new password required"
+                emptyFields:
+                  summary: Boş şifre alanları
+                  value: "the struct of passwords are invalid"
+                samePassword:
+                  summary: Yeni şifre eski ile aynı
+                  value: "the new and old passwords are same"
+                oldPasswordInvalid:
+                  summary: Eski şifre yanlış
+                  value: "old password invalid"
+        '401':
+          description: Authorization header Bearer formatında değil veya token geçersiz.
+          content:
+            text/plain:
+              schema:
+                type: string
+              examples:
+                invalidFormat:
+                  summary: Bearer prefix yok
+                  value: "invalid access token"
+                invalidToken:
+                  summary: Token geçersiz veya expire olmuş
+                  value: "invalid access token"
+        '405':
+          description: Yalnızca POST metodu kabul edilir.
+          content:
+            text/plain:
+              schema:
+                type: string
+        '429':
+          description: Çok fazla şifre değiştirme denemesi (rate limit).
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Sunucu hatası (hash veya database güncelleme hatası).
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /auth/delete-account:
+    delete:
+      tags: [Account Settings]
+      summary: Hesap Silme
+      description: |-
+        Kullanıcı hesabını kalıcı olarak siler.
+        
+        **Akış:**
+        1. Authorization header'dan Bearer token okunur ve format kontrol edilir
+        2. Token doğrulanır ve user UUID çıkarılır
+        3. Request body'den şifre alınır
+        4. UUID ile kullanıcı bulunur ve şifre doğrulanır
+        5. Refresh-Token cookie'si okunur
+        6. Cookie'deki refresh token deaktif edilir
+        7. Kullanıcı MongoDB'den silinir
+        8. Refresh-Token cookie'si temizlenir (MaxAge=-1)
+        
+        **Uyarı:** Bu işlem GERİ ALINAMAZ!
+        
+        **Güvenlik:**
+        - Bearer token format kontrolü gerekli
+        - Şifre doğrulaması zorunlu
+        - Sadece kendi hesabını silebilir (token doğrulama)
+        - Refresh-Token cookie'si olmalı
+        
+        **Not:** İmplementasyonda sadece cookie'deki token deaktif ediliyor, kullanıcının diğer cihazlardaki tokenları aktif kalıyor.
+        
+      parameters:
+        - name: Authorization
+          in: header
+          required: true
+          description: Bearer token formatında access token (format kontrolü yapılır)
+          schema:
+            type: string
+            example: "Bearer eyJhbGciOiJIUzI1NiIs..."
+        - name: Refresh-Token
+          in: cookie
+          required: true
+          description: HttpOnly refresh token cookie (hesap silme için gerekli)
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password:
+                  type: string
+                  description: Hesap şifresi (onay için)
+                  example: "MyPassword123!"
+      responses:
+        '200':
+          description: Hesap başarıyla silindi.
+          headers:
+            Set-Cookie:
+              description: Refresh-Token cookie'si temizlenir (MaxAge=-1)
+              schema:
+                type: string
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: ""
+              description: "Not: İmplementasyonda response body boş döner"
+        '401':
+          description: Bearer format yanlış, token geçersiz, şifre yanlış, veya Refresh-Token cookie'si yok.
+          content:
+            text/plain:
+              schema:
+                type: string
+              examples:
+                invalidFormat:
+                  summary: Bearer prefix yok
+                  value: "unauthorized"
+                invalidToken:
+                  summary: Access token geçersiz
+                  value: "unauthorized"
+                wrongPassword:
+                  summary: Şifre yanlış
+                  value: "unauthorized"
+                noCookie:
+                  summary: Refresh-Token cookie yok
+                  value: "unauthorized"
+        '405':
+          description: Yalnızca DELETE metodu kabul edilir.
+          content:
+            text/plain:
+              schema:
+                type: string
+        '500':
+          description: Sunucu hatası (JSON decode, token deaktif etme, veya user silme hatası).
+          content:
+            text/plain:
+              schema:
+                type: string
+

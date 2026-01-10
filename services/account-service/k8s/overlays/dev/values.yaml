@@ -1,0 +1,39 @@
+
+replicaCount: 1
+
+image:
+  tag: "latest"
+  pullPolicy: Always
+
+app:
+  environment: development
+  logLevel: debug
+  logFormat: text
+
+resources:
+  requests:
+    memory: 512Mi
+    cpu: 200m
+  limits:
+    memory: 1024Mi
+    cpu: 500m
+
+databases:
+  mssql:
+    externalName: host.minikube.internal  # Minikube Linux gateway to host
+    portName: mssql
+
+database:
+  name: account_db
+
+# Ingress Configuration for Dev
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+  hosts:
+    - host: ""
+      paths:
+        - path: /accounts(/|$)(.*)
+          pathType: ImplementationSpecific

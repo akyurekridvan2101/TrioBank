@@ -1,0 +1,26 @@
+# Kafka UI Yapılandırması
+# Kafka küme izleme ve yönetim arayüzü
+kafka-ui:
+  # ArgoCD sync wave - En son deploy edilir (Kafka ve Connect hazır olmalı)
+  commonAnnotations:
+    argocd.argoproj.io/sync-wave: "600"
+  
+  service:
+    type: ClusterIP
+    port: 80
+
+  # Kafka küme bağlantı ayarları
+  yamlApplicationConfig:
+    kafka:
+      clusters:
+        - name: triobank-local
+          
+          bootstrapServers: kafka-kafka-bootstrap.triobank.svc.cluster.local:9092
+          
+          # Kafka Connect entegrasyonu
+          kafkaConnect:
+            - name: debezium
+              address: http://connect-connect-api.triobank.svc.cluster.local:8083
+          
+          properties:
+            security.protocol: PLAINTEXT

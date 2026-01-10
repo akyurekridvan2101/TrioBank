@@ -1,0 +1,933 @@
+{
+    "openapi": "3.0.1",
+    "info": {
+        "title": "TrioBank API Gateway",
+        "version": "1.0.0",
+        "description": "TrioBank API Gateway - Unified access point for all microservices. Handles authentication, rate limiting, and routing to Ledger, Account, and Card services.",
+        "contact": {
+            "name": "TrioBank Platform",
+            "url": "https://triobank.example.com"
+        }
+    },
+    "servers": [
+        {
+            "url": "http://localhost:3000",
+            "description": "Local Development"
+        },
+        {
+            "url": "https://api.triobank.example.com",
+            "description": "Production"
+        }
+    ],
+    "tags": [
+        {
+            "name": "Authentication",
+            "description": "User authentication and session management"
+        },
+        {
+            "name": "Ledger",
+            "description": "Balance and transaction statement APIs"
+        },
+        {
+            "name": "Account",
+            "description": "Account management and product catalog"
+        },
+        {
+            "name": "Card",
+            "description": "Debit and virtual card management"
+        },
+        {
+            "name": "Client",
+            "description": "Client information management"
+        }
+    ],
+    "paths": {
+        "/auth/register": {
+            "post": {
+                "tags": [
+                    "Authentication"
+                ],
+                "summary": "Register new user",
+                "description": "Creates a new user account with email/phone verification",
+                "operationId": "register",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RegisterRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Registration successful, verification code sent"
+                    },
+                    "400": {
+                        "description": "Invalid request or user already exists"
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (10 requests per minute)"
+                    }
+                }
+            }
+        },
+        "/auth/register/confirm": {
+            "post": {
+                "tags": [
+                    "Authentication"
+                ],
+                "summary": "Confirm registration",
+                "description": "Verifies registration code and activates account",
+                "operationId": "confirmRegistration",
+                "responses": {
+                    "200": {
+                        "description": "Registration confirmed"
+                    }
+                }
+            }
+        },
+        "/auth/login": {
+            "post": {
+                "tags": [
+                    "Authentication"
+                ],
+                "summary": "Login",
+                "description": "Authenticate user and send verification code",
+                "operationId": "login",
+                "responses": {
+                    "200": {
+                        "description": "Login successful, verification code sent"
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (10 requests per minute)"
+                    }
+                }
+            }
+        },
+        "/auth/login/confirm": {
+            "post": {
+                "tags": [
+                    "Authentication"
+                ],
+                "summary": "Confirm login",
+                "description": "Verifies login code and returns JWT token",
+                "operationId": "confirmLogin",
+                "responses": {
+                    "200": {
+                        "description": "Login confirmed, token issued"
+                    }
+                }
+            }
+        },
+        "/auth/logout": {
+            "post": {
+                "tags": [
+                    "Authentication"
+                ],
+                "summary": "Logout",
+                "description": "Invalidates current session token",
+                "operationId": "logout",
+                "responses": {
+                    "200": {
+                        "description": "Logout successful"
+                    }
+                }
+            }
+        },
+        "/auth/refresh": {
+            "post": {
+                "tags": [
+                    "Authentication"
+                ],
+                "summary": "Refresh token",
+                "description": "Generates new access token using refresh token",
+                "operationId": "refreshToken",
+                "responses": {
+                    "200": {
+                        "description": "New token issued"
+                    }
+                }
+            }
+        },
+        "/auth/me": {
+            "get": {
+                "tags": [
+                    "Authentication"
+                ],
+                "summary": "Get current user",
+                "description": "Returns authenticated user information",
+                "operationId": "getCurrentUser",
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "User information retrieved"
+                    },
+                    "401": {
+                        "description": "Unauthorized"
+                    }
+                }
+            }
+        },
+        "/api/v1/ledger/balances/{accountId}": {
+            "get": {
+                "tags": [
+                    "Ledger"
+                ],
+                "summary": "Get account balance",
+                "description": "Returns current balance, blocked amount, and available balance",
+                "operationId": "getAccountBalance",
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "accountId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Balance retrieved successfully"
+                    },
+                    "404": {
+                        "description": "Account not found in ledger"
+                    },
+                    "429": {
+                        "description": "Rate limit exceeded (100 requests per minute)"
+                    }
+                }
+            }
+        },
+        "/api/v1/ledger/accounts/{accountId}/statement": {
+            "get": {
+                "tags": [
+                    "Ledger"
+                ],
+                "summary": "Get account statement",
+                "description": "Returns paginated transaction history with filters",
+                "operationId": "getAccountStatement",
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "accountId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "startDate",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "endDate",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "format": "date"
+                        }
+                    },
+                    {
+                        "name": "type",
+                        "in": "query",
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "DEBIT",
+                                "CREDIT"
+                            ]
+                        }
+                    },
+                    {
+                        "name": "keyword",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "default": 0
+                        }
+                    },
+                    {
+                        "name": "size",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "default": 20,
+                            "maximum": 100
+                        }
+                    },
+                    {
+                        "name": "includeRunningBalance",
+                        "in": "query",
+                        "schema": {
+                            "type": "boolean",
+                            "default": true
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Statement retrieved successfully"
+                    },
+                    "400": {
+                        "description": "Invalid parameters"
+                    }
+                }
+            }
+        },
+        "/v1/accounts": {
+            "get": {
+                "tags": [
+                    "Account"
+                ],
+                "summary": "Get customer accounts",
+                "description": "Lists all accounts for a customer with optional status filter",
+                "operationId": "getCustomerAccounts",
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "customerId",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "string",
+                                "enum": [
+                                    "ACTIVE",
+                                    "CLOSED"
+                                ]
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Account list retrieved"
+                    },
+                    "400": {
+                        "description": "Missing customerId parameter"
+                    }
+                }
+            },
+            "post": {
+                "tags": [
+                    "Account"
+                ],
+                "summary": "Create account",
+                "description": "Opens a new account for a customer",
+                "operationId": "createAccount",
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateAccountRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Account created successfully"
+                    },
+                    "400": {
+                        "description": "Invalid request"
+                    }
+                }
+            }
+        },
+        "/v1/accounts/{id}": {
+            "get": {
+                "tags": [
+                    "Account"
+                ],
+                "summary": "Get account details",
+                "description": "Retrieves details of a specific account",
+                "operationId": "getAccount",
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Account details retrieved"
+                    },
+                    "404": {
+                        "description": "Account not found"
+                    }
+                }
+            }
+        },
+        "/v1/accounts/{id}/status": {
+            "patch": {
+                "tags": [
+                    "Account"
+                ],
+                "summary": "Change account status",
+                "description": "Changes account status (ACTIVE ↔ CLOSED)",
+                "operationId": "changeAccountStatus",
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Status updated successfully"
+                    },
+                    "400": {
+                        "description": "Cannot reopen closed account"
+                    }
+                }
+            }
+        },
+        "/v1/accounts/{id}/configuration": {
+            "patch": {
+                "tags": [
+                    "Account"
+                ],
+                "summary": "Update account configuration",
+                "description": "Updates user-specific account settings (limits, notifications, etc)",
+                "operationId": "updateAccountConfiguration",
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Configuration updated"
+                    }
+                }
+            }
+        },
+        "/v1/products": {
+            "get": {
+                "tags": [
+                    "Account"
+                ],
+                "summary": "Get all products",
+                "description": "Lists all available account products",
+                "operationId": "getAllProducts",
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Product list retrieved"
+                    }
+                }
+            }
+        },
+        "/v1/products/{code}": {
+            "get": {
+                "tags": [
+                    "Account"
+                ],
+                "summary": "Get product details",
+                "description": "Retrieves details of a specific product",
+                "operationId": "getProduct",
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "code",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Product details retrieved"
+                    }
+                }
+            }
+        },
+        "/v1/cards/debit": {
+            "post": {
+                "tags": [
+                    "Card"
+                ],
+                "summary": "Issue debit card",
+                "description": "Creates a new debit card linked to an account",
+                "operationId": "issueDebitCard",
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/IssueDebitCardRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Debit card issued successfully"
+                    },
+                    "400": {
+                        "description": "Invalid request"
+                    },
+                    "404": {
+                        "description": "Account not found"
+                    }
+                }
+            }
+        },
+        "/v1/cards/virtual": {
+            "post": {
+                "tags": [
+                    "Card"
+                ],
+                "summary": "Issue virtual card",
+                "description": "Creates a new virtual card for online transactions",
+                "operationId": "issueVirtualCard",
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/IssueVirtualCardRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Virtual card issued successfully"
+                    }
+                }
+            }
+        },
+        "/v1/cards": {
+            "get": {
+                "tags": [
+                    "Card"
+                ],
+                "summary": "Get cards by customer or account",
+                "description": "Lists cards filtered by customerId or accountId",
+                "operationId": "getCards",
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "customerId",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "accountId",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "cardType",
+                        "in": "query",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "string",
+                                "enum": [
+                                    "DEBIT",
+                                    "VIRTUAL"
+                                ]
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Card list retrieved successfully"
+                    }
+                }
+            }
+        },
+        "/v1/cards/{id}": {
+            "get": {
+                "tags": [
+                    "Card"
+                ],
+                "summary": "Get card details",
+                "description": "Retrieves details of a specific card",
+                "operationId": "getCard",
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Card details retrieved"
+                    },
+                    "404": {
+                        "description": "Card not found"
+                    }
+                }
+            }
+        },
+        "/v1/cards/{id}/block": {
+            "patch": {
+                "tags": [
+                    "Card"
+                ],
+                "summary": "Block card",
+                "description": "Blocks a card with a reason (LOST, STOLEN, etc.)",
+                "operationId": "blockCard",
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "reason",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string",
+                            "enum": [
+                                "LOST",
+                                "STOLEN",
+                                "SUSPICIOUS_ACTIVITY",
+                                "USER_REQUEST"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Card blocked successfully"
+                    },
+                    "404": {
+                        "description": "Card not found"
+                    }
+                }
+            }
+        },
+        "/v1/cards/{id}/activate": {
+            "patch": {
+                "tags": [
+                    "Card"
+                ],
+                "summary": "Activate card",
+                "description": "Activates a blocked or inactive card",
+                "operationId": "activateCard",
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Card activated successfully"
+                    },
+                    "404": {
+                        "description": "Card not found"
+                    }
+                }
+            }
+        },
+        "/clients/{id}": {
+            "get": {
+                "tags": [
+                    "Client"
+                ],
+                "summary": "Get client details",
+                "description": "Retrieves client information",
+                "operationId": "getClient",
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ],
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Client details retrieved"
+                    },
+                    "404": {
+                        "description": "Client not found"
+                    }
+                }
+            }
+        },
+        "/health": {
+            "get": {
+                "tags": [
+                    "Health"
+                ],
+                "summary": "Health check",
+                "description": "Returns API Gateway health status",
+                "operationId": "healthCheck",
+                "responses": {
+                    "200": {
+                        "description": "Healthy",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "status": {
+                                            "type": "string",
+                                            "example": "healthy"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "securitySchemes": {
+            "bearerAuth": {
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "JWT",
+                "description": "JWT token from /auth/login/confirm endpoint"
+            }
+        },
+        "schemas": {
+            "RegisterRequest": {
+                "type": "object",
+                "required": [
+                    "email",
+                    "password"
+                ],
+                "properties": {
+                    "email": {
+                        "type": "string",
+                        "format": "email"
+                    },
+                    "password": {
+                        "type": "string",
+                        "minLength": 8
+                    },
+                    "phone": {
+                        "type": "string"
+                    }
+                }
+            },
+            "CreateAccountRequest": {
+                "type": "object",
+                "required": [
+                    "customerId",
+                    "productCode",
+                    "currency"
+                ],
+                "properties": {
+                    "customerId": {
+                        "type": "string"
+                    },
+                    "productCode": {
+                        "type": "string",
+                        "example": "CHECKING_TRY"
+                    },
+                    "currency": {
+                        "type": "string",
+                        "example": "TRY"
+                    },
+                    "configurations": {
+                        "type": "object",
+                        "additionalProperties": true
+                    }
+                }
+            },
+            "IssueDebitCardRequest": {
+                "type": "object",
+                "required": [
+                    "accountId",
+                    "cardholderName"
+                ],
+                "properties": {
+                    "accountId": {
+                        "type": "string"
+                    },
+                    "cardholderName": {
+                        "type": "string",
+                        "example": "AHMET YILMAZ"
+                    },
+                    "dailyWithdrawalLimit": {
+                        "type": "number"
+                    },
+                    "atmEnabled": {
+                        "type": "boolean"
+                    },
+                    "pin": {
+                        "type": "string",
+                        "pattern": "^[0-9]{4}$"
+                    }
+                }
+            },
+            "IssueVirtualCardRequest": {
+                "type": "object",
+                "required": [
+                    "accountId",
+                    "cardholderName"
+                ],
+                "properties": {
+                    "accountId": {
+                        "type": "string"
+                    },
+                    "cardholderName": {
+                        "type": "string"
+                    },
+                    "onlineOnly": {
+                        "type": "boolean",
+                        "default": true
+                    },
+                    "singleUse": {
+                        "type": "boolean",
+                        "default": false
+                    },
+                    "singleUseValidityHours": {
+                        "type": "integer",
+                        "default": 24
+                    },
+                    "usageRestriction": {
+                        "type": "string"
+                    }
+                }
+            }
+        }
+    }
+}

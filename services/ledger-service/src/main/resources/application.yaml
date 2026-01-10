@@ -1,0 +1,126 @@
+spring:
+  application:
+    name: ledger-service
+  
+  datasource:
+    url: jdbc:sqlserver://localhost:1433;databaseName=ledger_db;encrypt=false;trustServerCertificate=true
+    username: ${DB_USERNAME:sa}
+    password: ${DB_PASSWORD:TrioBank123}
+    driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
+  
+  jpa:
+    hibernate:
+      ddl-auto: none  # Migration dosyaları ile yönetiyoruz, validation kapalı
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.SQLServerDialect
+        jdbc:
+          time_zone: UTC
+  
+  # Kafka Consumer Only (Event dinlemek için)
+  # NOT: Event publishing Debezium CDC ile yapılıyor (outbox_events -> Kafka)
+  # kafka.enabled=false yaparsanız, Kafka olmadan da çalışır (development için)
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ledger-service
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: com.triobank.*
+      auto-offset-reset: earliest
+      enable-auto-commit: false  # Manual commit (güvenlik için)
+
+# Kafka Integration Control
+# false yaparsanız Kafka olmadan çalışır (broker yoksa bunu kullanın)
+kafka:
+  enabled: ${KAFKA_ENABLED:false}
+
+server:
+  port: ${SERVER_PORT:8082}  # Changed from 8083 to match Account Service client expectation
+  error:
+    include-message: always
+    include-binding-errors: always
+
+# Logging
+logging:
+  level:
+    com.triobank.ledger: DEBUG
+    org.springframework.kafka: INFO
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# Actuator
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+# OpenAPI/Swagger
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+  info:
+    title: Ledger Service API
+    description: TrioBank Ledger Service - Source of Truth for Financial Transactions
+    version: 1.0.0
+
+# Custom Ledger Properties
+ledger:
+  # Default değerler
+  default-currency: TRY
+  decimal-precision: 4
+  
+  # Kafka Topics (Consumer - dinlenecek)
+  # Standart: {domain}.{event}.{version}
+  # Örn: transaction.TransactionStarted.v1
+  kafka:
+    consumer:
+      topics:
+        # Transaction Service Events
+        transaction-started: transaction.TransactionStarted.${app.kafka.topic.version}
+        compensation-required: transaction.CompensationRequired.${app.kafka.topic.version}
+        
+        # Account Service Events  
+        account-created: account.AccountCreated.${app.kafka.topic.version}
+        account-deleted: account.AccountDeleted.${app.kafka.topic.version}
+
+    # Debezium CDC tarafından oluşturulan topic'ler (Referans için)
+    debezium:
+      topic-prefix: triobank.${app.env}.ledger
+      topic-suffix: .${app.kafka.topic.version}
+
+# Global App Settings
+app:
+  env: ${APP_ENV:local}
+  kafka:
+    topic:
+      version: v1
+  
+  # Outbox Pattern Config
+  outbox:
+    # Debezium EventRouter tarafından kullanılacak alanlar
+    # Migration'daki outbox_events tablosu ile uyumlu
+    enabled: true
+    table-name: outbox_events
+    fields:
+      id: id
+      aggregate-type: aggregate_type      # Topic routing için
+      aggregate-id: aggregate_id          # Kafka message key
+      type: type                          # Event type
+      payload: payload                    # JSON payload
+      timestamp: created_at               # Event timestamp

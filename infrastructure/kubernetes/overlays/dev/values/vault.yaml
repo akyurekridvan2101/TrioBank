@@ -1,0 +1,5 @@
+# Vault - Geliştirme Ortamı
+# Minikube'daki yerel Vault instance'ına bağlanır
+vault:
+  externalHost: "host.minikube.internal"
+

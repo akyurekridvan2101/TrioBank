@@ -1,0 +1,42 @@
+# ==============================================================================
+# Production Environment Root Application
+# Bu dosya PRODUCTION ortamını bootstrap eder
+# ==============================================================================
+# Kullanım: kubectl apply -f infrastructure/kubernetes/argocd/overlays/prod/root.yaml
+# ==============================================================================
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io  # App silinince child resource'ları da siler
+
+spec:
+  project: default
+
+  # Git source - Apps Helm chart'ını point ediyor
+  source:
+    repoURL: https://github.com/TrioBank/triobank.git
+    targetRevision: feature/account-service  # Production branch (feature/account-service)
+    path: infrastructure/kubernetes/argocd/apps        # Apps chart path
+    
+    # Helm values - Apps chart'a geçirilen parametreler
+    helm:
+      values: |
+        env: prod                      # Environment = PRODUCTION
+        branch: feature/account-service # Git branch for child apps
+
+  # Deployment destination
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd  # ApplicationSet'ler argocd namespace'inde oluşur
+
+  # Sync policy - Automated GitOps
+  syncPolicy:
+    automated:
+      prune: true       # Silinen kaynakları temizle
+      selfHeal: true    # Manuel değişiklikleri geri al
+    syncOptions:
+      - CreateNamespace=true

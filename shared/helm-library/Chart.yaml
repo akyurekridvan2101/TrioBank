@@ -1,0 +1,25 @@
+
+apiVersion: v2
+name: common
+description: Shared Helm templates for TrioBank services
+type: library
+version: 0.1.1  # Bumped to force Helm cache reload
+appVersion: "1.0.0"
+
+maintainers:
+  - name: TrioBank Platform Team
+    email: platform@triobank.com
+
+keywords:
+  - microservices
+  - debezium
+  - cdc
+  - flyway
+  - migration
+  - library
+
+annotations:
+  category: Library
+  
+  triobank.com/component: shared-templates
+  triobank.com/tier: platform

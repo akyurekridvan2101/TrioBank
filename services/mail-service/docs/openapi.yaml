@@ -1,0 +1,134 @@
+openapi: 3.0.3
+info:
+  title: TrioBank Mail Service API
+  description: |
+    Mail servisi, TrioBank platformunda e-posta gönderimi için kullanılan internal mikroservistir.
+    Resend API kullanarak güvenli ve hızlı e-posta gönderimi sağlar.
+    
+    **Güvenlik:** Tüm endpoint'ler (health check hariç) `X-Internal-Secret` header'ı ile korunmaktadır.
+  version: 1.0.0
+  contact:
+    name: TrioBank Development Team
+
+servers:
+  - url: http://localhost:8081
+    description: Local Development
+  - url: http://MailService:8081
+    description: Docker Network (Internal)
+
+tags:
+  - name: Mail
+    description: E-posta gönderme işlemleri
+  - name: Health
+    description: Servis sağlık kontrolü
+
+paths:
+  /send:
+    post:
+      tags:
+        - Mail
+      summary: E-posta Gönder
+      description: |
+        Belirtilen alıcıya doğrulama kodu içeren e-posta gönderir.
+        
+        **Not:** Bu endpoint internal servisler tarafından kullanılır.
+      operationId: sendMail
+      security:
+        - InternalSecret: []
+      parameters:
+        - name: X-Internal-Secret
+          in: header
+          required: true
+          description: Internal servisler arası güvenlik anahtarı
+          schema:
+            type: string
+            example: "internal-secret-key"
+        - name: X-Request-Deadline
+          in: header
+          required: true
+          description: Request deadline (Unix timestamp in milliseconds)
+          schema:
+            type: string
+            example: "1702563600000" 
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MailRequest'
+            examples:
+              verificationCode:
+                summary: Doğrulama kodu gönderimi
+                value:
+                  receiver: "user@example.com"
+                  code: "123456"
+      responses:
+        '200':
+          description: E-posta başarıyla gönderildi
+        '400':
+          description: Geçersiz request body
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "Bad Request"
+        '401':
+          description: Yetkisiz erişim - X-Internal-Secret header geçersiz
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "Unauthorized"
+        '500':
+          description: Sunucu hatası - E-posta gönderilemedi
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "Internal Server Error"
+  
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health Check
+      description: Servisin çalışır durumda olup olmadığını kontrol eder
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Servis sağlıklı
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "OK"
+
+components:
+  schemas:
+    MailRequest:
+      type: object
+      required:
+        - receiver
+        - code
+      properties:
+        receiver:
+          type: string
+          format: email
+          description: Alıcının e-posta adresi
+          example: "user@example.com"
+        code:
+          type: string
+          description: Doğrulama kodu (genellikle 6 haneli)
+          example: "123456"
+          minLength: 4
+          maxLength: 10
+
+  securitySchemes:
+    InternalSecret:
+      type: apiKey
+      in: header
+      name: X-Internal-Secret
+      description: Internal servisler arası güvenlik anahtarı
+
+security:
+  - InternalSecret: []

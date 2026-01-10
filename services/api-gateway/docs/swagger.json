@@ -1,0 +1,33 @@
+{
+    "schemes": [
+        "http",
+        "https"
+    ],
+    "swagger": "2.0",
+    "info": {
+        "description": "API Gateway for TrioBank microservices platform. Provides unified entry point with rate limiting, authentication, and request routing.",
+        "title": "TrioBank API Gateway",
+        "termsOfService": "http://triobank.com/terms/",
+        "contact": {
+            "name": "API Support",
+            "url": "http://www.triobank.com/support",
+            "email": "support@triobank.com"
+        },
+        "license": {
+            "name": "MIT",
+            "url": "https://opensource.org/licenses/MIT"
+        },
+        "version": "1.0"
+    },
+    "host": "localhost:3000",
+    "basePath": "/",
+    "paths": {},
+    "securityDefinitions": {
+        "BearerAuth": {
+            "description": "Type \"Bearer\" followed by a space and JWT token",
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
+        }
+    }
+}

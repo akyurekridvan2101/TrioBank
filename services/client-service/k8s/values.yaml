@@ -1,0 +1,122 @@
+
+commonAnnotations:
+  argocd.argoproj.io/sync-wave: "11"
+
+replicaCount: 1
+
+image:
+  repository: akyurekridvan2101/client-service
+  pullPolicy: Always
+  tag: "latest"
+
+imagePullSecrets:
+  - name: dockerhub-credentials
+
+serviceAccount:
+  create: true
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext: {}
+
+securityContext:
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 8082
+  targetPort: 8082
+
+ingress:
+  enabled: false
+  className: "nginx"
+  annotations: {}
+  hosts:
+    - host: client-service.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8082
+  initialDelaySeconds: 60
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8082
+  initialDelaySeconds: 60
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+
+env:
+  APP_ENV: "prod"
+  LOGGING_LEVEL: "INFO"
+
+# ConfigMap Environment Variables
+config:
+  APP_ENV: "prod"
+  SQL_ADDRESS: "client-mssql.triobank.svc.cluster.local:1433"
+  SQL_DATABASE_NAME: "client_db"
+  KAFKA_BROKER: "kafka-kafka-bootstrap.triobank.svc.cluster.local:9092"
+  KAFKA_TOPIC: "UserCreated"
+  KAFKA_GROUP_ID: "client-service-consumer"
+  ACCOUNT_SERVICE_URL: "http://account-service.triobank.svc.cluster.local:8081"
+
+
+# Database Configuration (MSSQL)
+databases:
+  mssql:
+    enabled: true
+    serviceName: client-mssql
+    type: mssql
+    portName: mssql
+    externalName: ""
+    annotations:
+      description: "Client primary database"
+
+database:
+  name: client_db
+  port: 1433
+  serviceName: client-mssql
+
+externalSecrets:
+  - name: db-mssql
+    enabled: true
+    vaultPath: secret/dev/services/client
+    targetSecret: client-db-credentials
+    refreshInterval: "1h"
+    fields:
+      - secretKey: SQL_USERNAME
+        property: db_username
+      - secretKey: SQL_PASSWORD
+        property: db_password
